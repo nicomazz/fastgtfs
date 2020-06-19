@@ -1,0 +1,17 @@
+[package]
+name = "fastgtfs"
+version = "0.1.0"
+authors = ["nicomazz <nicomazz97@gmail.com>"]
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+jni = { version = "0.10.2", default-features = false }
+
+[profile.release]
+lto = true
+
+[lib]
+name = "fastgtfs"
+crate-type = ["cdylib"]
