@@ -14,4 +14,4 @@ lto = true
 
 [lib]
 name = "fastgtfs"
-crate-type = ["cdylib"]
+crate-type = ["dylib"]
