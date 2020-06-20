@@ -57,8 +57,11 @@ pub fn read_shapes() -> Result<HashMap<String,Shape>,Error>{
     println!("fields time: {}", now.elapsed().as_millis());
 
     Ok(res)
-
 }
+
+/* pub fn read_stops() -> Result<Vec<Stop>, Error>> {
+
+} */
 
 pub fn parse_all() -> GtfsData {
     let mut routes= read_routes().unwrap();

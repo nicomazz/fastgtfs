@@ -1,10 +1,10 @@
 use geo::Coordinate;
+use rayon::prelude::*;
 use std::collections::HashMap;
 use std::fmt::format;
 use std::rc::Rc;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
-use rayon::prelude::*;
 
 use itertools::Itertools;
 
@@ -57,6 +57,7 @@ pub struct Trip {
     shape_id: String,
     wheelchair_accessible: String,
 }
+
 #[derive(Debug)]
 pub struct Shape {
     /*
@@ -66,10 +67,23 @@ pub struct Shape {
     1_0_1,45.417423,12.368521,2,0.02454935679179161
      */
     shape_id: String,
-    points: Vec<Coordinate<f32>>,
-   // dist_traveled: Vec<u64>, //meters
+    points: Vec<Coordinate<f64>>,
 }
 
+#[derive(Debug)]
+pub struct Stop {
+    stop_id : String,
+    stop_code : i64,
+    stop_name : String,
+    stop_desc : String,
+    stop_pos : Coordinate::<f64>,
+    zone_id : String,
+    stop_url : String,
+    location_type: String,
+    parent_station : String,
+    stop_timezone : String,
+    wheelchair_boarding : String
+}
 struct RouteCorrespondence {
     route_id: usize,
     agency_id: usize,
@@ -201,7 +215,10 @@ impl Route {
     }
 }
 
-
+struct ShapeInConsturction<'a> {
+    id: String,
+    shape_points_strings: Vec<Vec<&'a str>>,
+}
 impl Shape {
     pub fn parse_shapes(s: &str) -> HashMap<String, Shape> {
         let mut lines = s.split("\r\n");
@@ -215,25 +232,38 @@ impl Shape {
             .map(|l| l.split(",").collect())
             .group_by(|v: &Vec<&str>| v[c.shape_id])
             .into_iter()
-            .map(|(shape_id, vals)| Shape {
-                shape_id: shape_id.to_string(),
-                points: vals
-                    .into_iter()
-                    .map(|v| Shape::to_coordinates( 
-                        v[c.shape_pt_lat], v[c.shape_pt_lon])
-                    )
-                    .collect(),
+            .collect::<Vec<(&str,_)>>()
+            .into_iter()
+            //.par_iter()
+            .map(|(shape_id, vals)| ShapeInConsturction {
+                id: shape_id.to_string(),
+                shape_points_strings: vals.into_iter().collect::<Vec<Vec<&str>>>(),
+            })
+            .collect::<Vec<ShapeInConsturction>>()
+            .par_iter()
+            .map(|sh| {
+                let shape_id = String::from(&sh.id);
+                Shape {
+                    shape_id: shape_id,
+                    points: (&sh.shape_points_strings)
+                        .par_iter()
+                        .map(|v| Shape::to_coordinates(v[c.shape_pt_lat], v[c.shape_pt_lon]))
+                        .collect(),
+                }
             })
             .map(|shape| (shape.shape_id.to_owned(), shape))
             .collect::<HashMap<String, Shape>>()
+
+        //.map(|shape| (shape.shape_id.to_owned(), shape))
+        //.collect::<HashMap<String, Shape>>()
     }
-    fn to_meters(km: &str) -> u64  {
+    fn to_meters(km: &str) -> u64 {
         (km.parse::<f64>().unwrap() * 1000.0) as u64
     }
-    fn to_coordinates(lat: &str, lng: &str) -> Coordinate<f32> {
-        Coordinate{
-            x: lat.parse::<f32>().unwrap() ,
-            y: lng.parse::<f32>().unwrap() 
+    fn to_coordinates(lat: &str, lng: &str) -> Coordinate<f64> {
+        Coordinate {
+            x: lat.parse::<f64>().unwrap(),
+            y: lng.parse::<f64>().unwrap(),
         }
     }
     fn find_fields(fields: Vec<&str>) -> ShapeCorrespondence {

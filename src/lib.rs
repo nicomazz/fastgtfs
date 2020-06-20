@@ -5,6 +5,7 @@ mod parser;
 use lazy_static::lazy_static; // 1.4.0
 use std::sync::Mutex;
 use itertools::Itertools;
+use std::time::{Duration, Instant};
 
 lazy_static! {
     static ref gtfs_dataset: Mutex<GtfsData> = Mutex::new(Default::default());
@@ -36,7 +37,10 @@ pub fn get_stop_desc(stop_id: i32) {
 #[test]
 fn it_works() {
     let mut dataset = gtfs_dataset.lock().unwrap();
+    let now = Instant::now();
     *dataset = parser::parse_all();
+    println!("All parsing time: {}", now.elapsed().as_millis());
+
     assert!(dataset.routes.len() > 0);
     assert!(dataset.trips.len() > 0);
     assert!(dataset.shapes.len() > 0);
