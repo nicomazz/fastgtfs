@@ -3,6 +3,8 @@ use std::collections::HashMap;
 use std::fmt::format;
 use std::rc::Rc;
 use std::sync::Arc;
+use std::time::{Duration, Instant};
+use rayon::prelude::*;
 
 use itertools::Itertools;
 
@@ -25,6 +27,7 @@ pub struct GtfsData {
     // pub stops: Vec<Stop>,
     pub routes: Vec<Route>,
     pub trips: Vec<Arc<Trip>>,
+    pub shapes: HashMap<String, Shape>,
     //pub agencies: Vec<Agency>,
     //pub shapes: Vec<Shape>,
 }
@@ -63,8 +66,8 @@ pub struct Shape {
     1_0_1,45.417423,12.368521,2,0.02454935679179161
      */
     shape_id: String,
-    points: Vec<Coordinate<i64>>,
-    dist_traveled: Vec<u64>, //meters
+    points: Vec<Coordinate<f32>>,
+   // dist_traveled: Vec<u64>, //meters
 }
 
 struct RouteCorrespondence {
@@ -198,36 +201,41 @@ impl Route {
     }
 }
 
+
 impl Shape {
-   /*  fn parse_shapes(s: &str) -> HashMap<String, Shape> {
+    pub fn parse_shapes(s: &str) -> HashMap<String, Shape> {
         let mut lines = s.split("\r\n");
+
         let fields = lines.next().unwrap().split(",").collect();
         let c = Shape::find_fields(fields);
 
         lines
+            .into_iter()
+            .filter(|l| l.len() > 0)
             .map(|l| l.split(",").collect())
-            .group_by(|v : Vec<&str>| v[c.shape_id])
-            .map(|grp| {
-                let shape_id = grp.key;
-                let vals = grp.vals;
-                Shape {
-                    shape_id: grp.key,
-                    points: grp
-                        .vals
-                        .into_iter()
-                        .map(|v| Coordinate {
-                            x: v[c.shape_pt_lat],
-                            y: v[c.shape_pt_lon],
-                        })
-                        .collect(),
-                    dist_traveled: grp
-                        .vals
-                        .into_iter()
-                        .map(|v| v[c.shape_dist_traveled])
-                        .collect(),
-                };
+            .group_by(|v: &Vec<&str>| v[c.shape_id])
+            .into_iter()
+            .map(|(shape_id, vals)| Shape {
+                shape_id: shape_id.to_string(),
+                points: vals
+                    .into_iter()
+                    .map(|v| Shape::to_coordinates( 
+                        v[c.shape_pt_lat], v[c.shape_pt_lon])
+                    )
+                    .collect(),
             })
-    } */
+            .map(|shape| (shape.shape_id.to_owned(), shape))
+            .collect::<HashMap<String, Shape>>()
+    }
+    fn to_meters(km: &str) -> u64  {
+        (km.parse::<f64>().unwrap() * 1000.0) as u64
+    }
+    fn to_coordinates(lat: &str, lng: &str) -> Coordinate<f32> {
+        Coordinate{
+            x: lat.parse::<f32>().unwrap() ,
+            y: lng.parse::<f32>().unwrap() 
+        }
+    }
     fn find_fields(fields: Vec<&str>) -> ShapeCorrespondence {
         ShapeCorrespondence {
             shape_id: fields.inx_of("shape_id"),

@@ -7,10 +7,7 @@ use std::sync::Mutex;
 use itertools::Itertools;
 
 lazy_static! {
-    static ref gtfs_dataset: Mutex<GtfsData> = Mutex::new(GtfsData {
-        routes: Vec::new(),
-        trips: Vec::new()
-    });
+    static ref gtfs_dataset: Mutex<GtfsData> = Mutex::new(Default::default());
 }
 
 pub fn testing() {
@@ -42,6 +39,7 @@ fn it_works() {
     *dataset = parser::parse_all();
     assert!(dataset.routes.len() > 0);
     assert!(dataset.trips.len() > 0);
+    assert!(dataset.shapes.len() > 0);
 }
 
 #[test]
