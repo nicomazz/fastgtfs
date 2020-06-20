@@ -4,6 +4,7 @@ use std::fs::File;
 use std::io::Error;
 use std::io::Read;
 use std::path::Path;
+use std::sync::Arc;
 
 
 use crate::models::{GtfsData, ParseRouteResult, Route, Trip};
@@ -22,7 +23,7 @@ pub(crate) fn read_routes() -> Result<ParseRouteResult, Error> {
     Ok(res)
 }
 
-pub(crate) fn read_trips(route_mappings: HashMap<String, u32>) -> Result<Vec<Trip>, Error> {
+pub(crate) fn read_trips(route_mappings: HashMap<String, u32>) -> Result<Vec<Arc<Trip>>, Error> {
     println!("read trips");
     let path = env::current_dir()?;
     println!("current path: {}", path.display());
@@ -40,9 +41,12 @@ pub(crate) fn read_trips(route_mappings: HashMap<String, u32>) -> Result<Vec<Tri
 }
 
 pub fn parse_all() -> GtfsData {
-    let routes: ParseRouteResult = read_routes().unwrap();
-    let trips = read_trips(routes.id_mapping).unwrap();
+    let mut routes= read_routes().unwrap();
+    let trips : Vec<Arc<Trip>> = read_trips(routes.id_mapping).unwrap();
 
+    for trip in &trips {
+        routes.routes[trip.route_id as usize].trips.push(trip.clone());
+    }
 
     let gtfs_data_set = GtfsData {
         routes: routes.routes,

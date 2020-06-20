@@ -1,5 +1,10 @@
+use geo::Coordinate;
 use std::collections::HashMap;
 use std::fmt::format;
+use std::rc::Rc;
+use std::sync::Arc;
+
+use itertools::Itertools;
 
 pub trait Searchable {
     fn inx_of(&self, s: &str) -> usize;
@@ -7,25 +12,39 @@ pub trait Searchable {
 
 impl Searchable for Vec<&str> {
     fn inx_of(&self, s: &str) -> usize {
-        self.iter().position(|&r| r == s).expect(&format!("Missing field: {}",s))
+        self.iter()
+            .position(|&r| r == s)
+            .expect(&format!("Missing field: {}", s))
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct GtfsData {
     // pub calendar: HashMap<String, Calendar>,
     // pub calendar_dates: HashMap<String, Vec<CalendarDate>>,
     // pub stops: Vec<Stop>,
     pub routes: Vec<Route>,
-    pub trips: Vec<Trip>,
+    pub trips: Vec<Arc<Trip>>,
     //pub agencies: Vec<Agency>,
     //pub shapes: Vec<Shape>,
 }
-
+#[derive(Debug, Default)]
+pub struct Route {
+    route_id: u32,
+    agency_id: String,
+    route_short_name: String,
+    route_long_name: String,
+    route_desc: String,
+    route_type: String,
+    route_url: String,
+    route_color: String,
+    route_text_color: String,
+    pub trips: Vec<Arc<Trip>>,
+}
 
 #[derive(Debug)]
 pub struct Trip {
-    route_id: u32,
+    pub route_id: u32,
     service_id: String,
     trip_id: String,
     trip_headsign: String,
@@ -34,6 +53,30 @@ pub struct Trip {
     block_id: String,
     shape_id: String,
     wheelchair_accessible: String,
+}
+#[derive(Debug)]
+pub struct Shape {
+    /*
+        shape_id,shape_pt_lat,shape_pt_lon,shape_pt_sequence,shape_dist_traveled
+    1_0_1,45.417561,12.368731,0,0.0
+    1_0_1,45.417545,12.368747,1,0.0021125906752124325
+    1_0_1,45.417423,12.368521,2,0.02454935679179161
+     */
+    shape_id: String,
+    points: Vec<Coordinate<i64>>,
+    dist_traveled: Vec<u64>, //meters
+}
+
+struct RouteCorrespondence {
+    route_id: usize,
+    agency_id: usize,
+    route_short_name: usize,
+    route_long_name: usize,
+    route_desc: usize,
+    route_type: usize,
+    route_url: usize,
+    route_color: usize,
+    route_text_color: usize,
 }
 
 struct TripCorrespondence {
@@ -48,9 +91,16 @@ struct TripCorrespondence {
     wheelchair_accessible: usize,
 }
 
-impl Trip {
+struct ShapeCorrespondence {
+    shape_id: usize,
+    shape_pt_lat: usize,
+    shape_pt_lon: usize,
+    shape_pt_sequence: usize,
+    shape_dist_traveled: usize,
+}
 
-    pub fn parse_trips(s: &str, route_mappings: HashMap<String, u32>) -> Vec<Trip> {
+impl Trip {
+    pub fn parse_trips(s: &str, route_mappings: HashMap<String, u32>) -> Vec<Arc<Trip>> {
         let mut lines = s.split("\r\n");
 
         let fields = lines.next().unwrap().split(",").collect();
@@ -60,8 +110,12 @@ impl Trip {
             .filter(|l| l.len() > 0)
             .map(|l| {
                 let sp: Vec<_> = l.split(",").collect();
-                let route_id = route_mappings.get(sp[c.route_id]).or(Some(&0)).unwrap().to_owned();
-                Trip {
+                let route_id = route_mappings
+                    .get(sp[c.route_id])
+                    .or(Some(&0))
+                    .unwrap()
+                    .to_owned();
+                Arc::new(Trip {
                     route_id,
                     service_id: sp[c.service_id].to_string(),
                     trip_id: sp[c.trip_id].to_string(),
@@ -71,8 +125,9 @@ impl Trip {
                     block_id: sp[c.block_id].to_string(),
                     shape_id: sp[c.shape_id].to_string(),
                     wheelchair_accessible: sp[c.wheelchair_accessible].to_string(),
-                }
-            }).collect()
+                })
+            })
+            .collect()
     }
 
     fn find_fields(fields: Vec<&str>) -> TripCorrespondence {
@@ -90,31 +145,6 @@ impl Trip {
     }
 }
 
-#[derive(Debug)]
-pub struct Route {
-    route_id: u32,
-    agency_id: String,
-    route_short_name: String,
-    route_long_name: String,
-    route_desc: String,
-    route_type: String,
-    route_url: String,
-    route_color: String,
-    route_text_color: String,
-}
-
-struct RouteCorrespondence {
-    route_id: usize,
-    agency_id: usize,
-    route_short_name: usize,
-    route_long_name: usize,
-    route_desc: usize,
-    route_type: usize,
-    route_url: usize,
-    route_color: usize,
-    route_text_color: usize,
-}
-
 pub struct ParseRouteResult {
     pub(crate) routes: Vec<Route>,
     pub(crate) id_mapping: HashMap<String, u32>,
@@ -127,16 +157,17 @@ impl Route {
         let fields = lines.next().unwrap().split(",").collect();
         let c = Route::find_fields(fields);
         let mut id_mapping: HashMap<String, u32> = HashMap::new();
-        let mut att_route_inx = 1;
+        let mut att_route_inx = 0;
         let routes = lines
             .filter(|l| l.len() > 0)
             .map(|l| {
                 let sp: Vec<_> = l.split(",").collect();
                 let route_id_str = sp[c.route_id].to_string();
-                let route_id = id_mapping.entry(route_id_str).or_insert(att_route_inx).to_owned();
+                let route_id = att_route_inx;
+                id_mapping.insert(route_id_str, route_id);
                 att_route_inx += 1;
                 Route {
-                    route_id: route_id.to_owned(),
+                    route_id,
                     agency_id: sp[c.agency_id].to_string(),
                     route_short_name: sp[c.route_short_name].to_string(),
                     route_long_name: sp[c.route_long_name].to_string(),
@@ -145,12 +176,11 @@ impl Route {
                     route_url: sp[c.route_url].to_string(),
                     route_color: sp[c.route_color].to_string(),
                     route_text_color: sp[c.route_text_color].to_string(),
+                    ..Default::default()
                 }
-            }).collect();
-        return ParseRouteResult {
-            routes,
-            id_mapping,
-        };
+            })
+            .collect();
+        return ParseRouteResult { routes, id_mapping };
     }
 
     fn find_fields(fields: Vec<&str>) -> RouteCorrespondence {
@@ -164,6 +194,47 @@ impl Route {
             route_url: fields.inx_of("route_url"),
             route_color: fields.inx_of("route_color"),
             route_text_color: fields.inx_of("route_text_color"),
+        }
+    }
+}
+
+impl Shape {
+   /*  fn parse_shapes(s: &str) -> HashMap<String, Shape> {
+        let mut lines = s.split("\r\n");
+        let fields = lines.next().unwrap().split(",").collect();
+        let c = Shape::find_fields(fields);
+
+        lines
+            .map(|l| l.split(",").collect())
+            .group_by(|v : Vec<&str>| v[c.shape_id])
+            .map(|grp| {
+                let shape_id = grp.key;
+                let vals = grp.vals;
+                Shape {
+                    shape_id: grp.key,
+                    points: grp
+                        .vals
+                        .into_iter()
+                        .map(|v| Coordinate {
+                            x: v[c.shape_pt_lat],
+                            y: v[c.shape_pt_lon],
+                        })
+                        .collect(),
+                    dist_traveled: grp
+                        .vals
+                        .into_iter()
+                        .map(|v| v[c.shape_dist_traveled])
+                        .collect(),
+                };
+            })
+    } */
+    fn find_fields(fields: Vec<&str>) -> ShapeCorrespondence {
+        ShapeCorrespondence {
+            shape_id: fields.inx_of("shape_id"),
+            shape_pt_lat: fields.inx_of("shape_pt_lat"),
+            shape_pt_lon: fields.inx_of("shape_pt_lon"),
+            shape_pt_sequence: fields.inx_of("shape_pt_sequence"),
+            shape_dist_traveled: fields.inx_of("shape_dist_traveled"),
         }
     }
 }

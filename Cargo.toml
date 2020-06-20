@@ -8,6 +8,9 @@ edition = "2018"
 
 [dependencies]
 jni = { version = "0.10.2", default-features = false }
+lazy_static = "1.4.0"
+geo = "0.13.0"
+itertools = "0.9.0"
 
 [profile.release]
 lto = true
