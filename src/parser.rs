@@ -1,4 +1,3 @@
-use crate::models::Shape;
 use std::collections::HashMap;
 use std::env;
 use std::fs::File;
@@ -6,103 +5,94 @@ use std::io::Error;
 use std::io::Read;
 use std::path::Path;
 use std::sync::Arc;
-use std::time::{Instant};
+use std::time::Instant;
 
+use crate::models::{GtfsData, ParseRouteResult, Route, Stop, Trip};
+use crate::models::Shape;
 
-use crate::models::{GtfsData, ParseRouteResult, Route, Trip,Stop};
-
-pub(crate) fn read_routes() -> Result<ParseRouteResult, Error> {
-    let path = env::current_dir()?;
-    println!("current path: {}", path.display());
-
-    let path = Path::new("test_data/routes.txt");
-    let mut file = File::open(&path).expect("Can't open trips.txt");
-    let mut s = String::new();
-
-    file.read_to_string(&mut s).expect("Can't read trips.txt");
-
-    let res = Route::parse_routes(s.as_ref());
-    Ok(res)
+struct Parser {
+    path: String,
 }
-
-pub(crate) fn read_trips(route_mappings: HashMap<String, u32>) -> Result<Vec<Arc<Trip>>, Error> {
-    println!("read trips");
-    let path = env::current_dir()?;
-    println!("current path: {}", path.display());
-
-    let path = Path::new("test_data/trips.txt");
-
-    let mut file = File::open(&path).expect("Can't open trips.txt");
-
-    let mut s = String::new();
-
-    let now = Instant::now();
-    file.read_to_string(&mut s).expect("Can't read trips.txt");
-
-    let res = Trip::parse_trips(s.as_ref(), route_mappings);
-    println!("trips time: {}", now.elapsed().as_millis());
-
-    Ok(res)
-}
-
-pub fn read_shapes() -> Result<HashMap<String,Shape>,Error>{
-    let path = Path::new("test_data/shapes.txt");
-
-    let mut file = File::open(&path).expect("Can't open trips.txt");
-
-    let mut s = String::new();
-    let now = Instant::now();
-
-    file.read_to_string(&mut s).expect("Can't read shapes.txt");
-    println!("read string time: {}", now.elapsed().as_millis());
-
-    let res = Shape::parse_shapes(s.as_ref());
-    println!("shape time: {}", now.elapsed().as_millis());
-
-    Ok(res)
-}
-
-
-pub fn read_stops() -> Result<Vec<Stop>, Error> {
-    let path = Path::new("test_data/stops.txt");
-
-    let mut file = File::open(&path).expect("Can't open stops.txt");
-
-    let mut s = String::new();
-    let now = Instant::now();
-
-    file.read_to_string(&mut s).expect("Can't read stops.txt");
-    println!("read stop time: {}", now.elapsed().as_millis());
-
-    let res = Stop::parse_stops(s.as_ref());
-    println!("parse stop time: {}", now.elapsed().as_millis());
-
-    Ok(res)
-} 
-
-/* pub fn parse_from_path(path: &Path, dataset: GtfsData) -> GtfsData{
-    let mut routes= read_routes().unwrap();
-    let trips : Vec<Arc<Trip>> = read_trips(routes.id_mapping).unwrap();
-    let shapes = read_shapes().unwrap();
-    let stops = read_stops().unwrap();
-}  */
-pub fn parse_all() -> GtfsData {
-    let mut routes= read_routes().unwrap();
-    let trips : Vec<Arc<Trip>> = read_trips(routes.id_mapping).unwrap();
-    let shapes = read_shapes().unwrap();
-    let stops = read_stops().unwrap();
-    /* for trip in trips.iter() {
-        routes.routes[trip.route_id as usize].trips.push(trip.clone());
-    } */
-
-    GtfsData {
-        routes: routes.routes,
-        shapes,
-        trips,
-        stops
+/*
+let path = env::current_dir()?;
+println!("current path: {}", path.display());
+*/
+impl Parser {
+    fn read_file(&self, file: &Path) -> Result<String, Error> {
+        let path = Path::new(&self.path).join(Path::new(file));
+        let mut file = File::open(&path)?;
+        let mut s = String::new();
+        file.read_to_string(&mut s)?;
+        Ok(s)
     }
-   // println!("{:#?}", gtfs_data_set.trips.iter().take(10));
-    //println!("{:#?}", gtfs_data_set.routes.iter().take(10));
-    //println!("{:#?}", gtfs_data_set.trips);
+
+    pub(crate) fn read_routes(&self) -> Result<ParseRouteResult, Error> {
+        let s = self.read_file(Path::new("routes.txt"))?;
+        let res = Route::parse_routes(&s);
+        Ok(res)
+    }
+
+    pub(crate) fn read_trips(&self, route_mappings: HashMap<String, u32>) -> Result<Vec<Arc<Trip>>, Error> {
+        let s = self.read_file(Path::new("trips.txt"))?;
+        let now = Instant::now();
+        let res = Trip::parse_trips(&s, route_mappings);
+        println!("trips time: {}", now.elapsed().as_millis());
+        Ok(res)
+    }
+
+    pub fn read_shapes(&self) -> Result<Vec<Shape>, Error> {
+        let s = self.read_file(Path::new("shapes.txt"))?;
+        let now = Instant::now();
+        let res = Shape::parse_shapes(&s);
+        println!("shape time: {}", now.elapsed().as_millis());
+        Ok(res)
+    }
+
+
+    pub fn read_stops(&self) -> Result<Vec<Stop>, Error> {
+        let s = self.read_file(Path::new("stops.txt"))?;
+        let now = Instant::now();
+        let res = Stop::parse_stops(&s);
+        println!("stops time: {}", now.elapsed().as_millis());
+        Ok(res)
+    }
+
+    pub fn parse_all(&self) -> Result<GtfsData, Error> {
+        let mut routes = self.read_routes()?;
+        let trips: Vec<Arc<Trip>> = self.read_trips(routes.id_mapping)?;
+        let shapes = self.read_shapes()?;
+        let stops = self.read_stops()?;
+        /* for trip in trips.iter() {
+            routes.routes[trip.route_id as usize].trips.push(trip.clone());
+        } */
+
+        Ok(GtfsData {
+            routes: routes.routes,
+            shapes,
+            trips,
+            stops,
+        })
+    }
 }
+
+pub fn parse_from_path<'a>(path: &String, dataset: &'a mut GtfsData) -> Result<&'a GtfsData, Error> {
+    let parser = Parser { path : path.to_string() };
+    let mut new_dataset: GtfsData = parser.parse_all()?;
+    Ok(dataset.merge_dataset(&mut new_dataset))
+}
+
+pub fn parse_from_paths(paths: Vec<String>) -> GtfsData {
+    let path = env::current_dir().unwrap();
+    println!("current path: {}", path.display());
+    let mut dataset: GtfsData = Default::default();
+    for path in paths {
+        match parse_from_path(&path, &mut dataset) {
+            Ok(_) => { println!("{} Loaded sucessfully", path); }
+            Err(e) => { eprintln!("Error loading from {}: {}", path,e); }
+        }
+    }
+    dataset.do_postprocessing();
+    dataset
+}
+
 

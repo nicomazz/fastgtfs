@@ -1,12 +1,13 @@
-use geo::Coordinate;
-use rayon::prelude::*;
 use std::collections::HashMap;
 use std::fmt::format;
+use std::io::Error;
 use std::rc::Rc;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
+use geo::Coordinate;
 use itertools::Itertools;
+use rayon::prelude::*;
 
 pub trait Searchable {
     fn inx_of(&self, s: &str) -> usize;
@@ -26,7 +27,7 @@ pub struct GtfsData {
     // pub calendar_dates: HashMap<String, Vec<CalendarDate>>,
     pub routes: Vec<Route>,
     pub trips: Vec<Arc<Trip>>,
-    pub shapes: HashMap<String, Shape>,
+    pub shapes: Vec<Shape>,
     pub stops: Vec<Stop>,
     //pub agencies: Vec<Agency>,
     //pub shapes: Vec<Shape>,
@@ -34,7 +35,21 @@ pub struct GtfsData {
 
 impl GtfsData {
     pub fn add_routes(new_routes: Vec<Route>) {}
+
+    pub fn merge_dataset(&mut self, new_ds: &mut GtfsData) -> &GtfsData {
+        self.routes.append(new_ds.routes.as_mut());
+        self.trips.append(new_ds.trips.as_mut());
+        self.shapes.append(new_ds.shapes.as_mut());
+        self.stops.append(new_ds.stops.as_mut());
+        assert_eq!(new_ds.stops.len(), 0);
+        self
+    }
+
+    pub fn do_postprocessing(&self) {
+        // todo
+    }
 }
+
 #[derive(Debug, Default)]
 pub struct Route {
     fast_id: i64,
@@ -91,6 +106,7 @@ pub struct Stop {
     stop_timezone: String,
     wheelchair_boarding: String,
 }
+
 struct RouteCorrespondence {
     route_id: usize,
     agency_id: usize,
@@ -194,24 +210,24 @@ pub struct ParseRouteResult {
 }
 
 impl Route {
-    fn parse_csv_line(l : &str, c: &RouteCorrespondence) -> Route {
+    fn parse_csv_line(l: &str, c: &RouteCorrespondence) -> Route {
         let sp: Vec<_> = l.split(",").collect();
-                let route_id_str = sp[c.route_id].to_string();
-                /*  let route_id = att_route_inx;
-                id_mapping.insert(route_id_str, route_id);
-                att_route_inx += 1; */
-                Route {
-                    route_id: route_id_str,
-                    agency_id: sp[c.agency_id].to_string(),
-                    route_short_name: sp[c.route_short_name].to_string(),
-                    route_long_name: sp[c.route_long_name].to_string(),
-                    route_desc: sp[c.route_desc].to_string(),
-                    route_type: sp[c.route_type].to_string(),
-                    route_url: sp[c.route_url].to_string(),
-                    route_color: sp[c.route_color].to_string(),
-                    route_text_color: sp[c.route_text_color].to_string(),
-                    ..Default::default()
-                }
+        let route_id_str = sp[c.route_id].to_string();
+        /*  let route_id = att_route_inx;
+        id_mapping.insert(route_id_str, route_id);
+        att_route_inx += 1; */
+        Route {
+            route_id: route_id_str,
+            agency_id: sp[c.agency_id].to_string(),
+            route_short_name: sp[c.route_short_name].to_string(),
+            route_long_name: sp[c.route_long_name].to_string(),
+            route_desc: sp[c.route_desc].to_string(),
+            route_type: sp[c.route_type].to_string(),
+            route_url: sp[c.route_url].to_string(),
+            route_color: sp[c.route_color].to_string(),
+            route_text_color: sp[c.route_text_color].to_string(),
+            ..Default::default()
+        }
     }
     pub fn parse_routes(s: &str) -> ParseRouteResult {
         let mut lines = s.split("\r\n");
@@ -247,11 +263,12 @@ struct ShapeInConsturction<'a> {
     id: String,
     shape_points_strings: Vec<&'a str>,
 }
+
 impl Shape {
     fn first_component(s: &str) -> &str {
         return &s[..s.find(',').unwrap_or(s.len())];
     }
-    pub fn parse_shapes(s: &str) -> HashMap<String, Shape> {
+    pub fn parse_shapes(s: &str) -> Vec<Shape> {
         let mut lines = s.split("\r\n");
 
         let fields = lines.next().unwrap().split(",").collect();
@@ -273,7 +290,7 @@ impl Shape {
             .map(|sh| {
                 let shape_id = String::from(&sh.id);
                 Shape {
-                    shape_id: shape_id,
+                    shape_id,
                     points: (&sh.shape_points_strings)
                         .into_iter()
                         .map(|l| l.split(',').collect())
@@ -281,8 +298,9 @@ impl Shape {
                         .collect(),
                 }
             })
-            .map(|shape| (shape.shape_id.to_owned(), shape))
-            .collect::<HashMap<String, Shape>>()
+            .collect::<Vec<Shape>>()
+        // .map(|shape| (shape.shape_id.to_owned(), shape))
+        //.collect::<HashMap<String, Shape>>()
 
         //.map(|shape| (shape.shape_id.to_owned(), shape))
         //.collect::<HashMap<String, Shape>>()
@@ -310,8 +328,7 @@ fn to_coordinates(lat: &str, lng: &str) -> Coordinate<f64> {
 }
 
 impl Stop {
-
-    fn parse_csv_line(l: &str, c:&StopCorrespondence) -> Stop {
+    fn parse_csv_line(l: &str, c: &StopCorrespondence) -> Stop {
         let v = l.split(',').collect::<Vec<&str>>();
         Stop {
             stop_id: v[c.stop_id].to_string(),
@@ -337,7 +354,7 @@ impl Stop {
             .collect::<Vec<&str>>()
             .par_iter()
             .filter(|l| l.len() > 0)
-            .map(|l| Stop::parse_csv_line(l,&c))
+            .map(|l| Stop::parse_csv_line(l, &c))
             .collect()
     }
 
