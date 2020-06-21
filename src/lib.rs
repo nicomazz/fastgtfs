@@ -44,7 +44,22 @@ fn it_works() {
     assert!(dataset.routes.len() > 0);
     assert!(dataset.trips.len() > 0);
     assert!(dataset.shapes.len() > 0);
+    assert!(dataset.stops.len() > 0);
 }
+
+#[test]
+/* fn parse_multiple() {
+    let paths = [Path("../test_data")]
+    let mut dataset = gtfs_dataset.lock().unwrap();
+    let now = Instant::now();
+    *dataset = parser::parse_all();
+    println!("All parsing time: {}", now.elapsed().as_millis());
+
+    assert!(dataset.routes.len() > 0);
+    assert!(dataset.trips.len() > 0);
+    assert!(dataset.shapes.len() > 0);
+    assert!(dataset.stops.len() > 0);
+} */
 
 #[test]
 fn groupby_test() {
