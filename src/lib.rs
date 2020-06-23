@@ -9,8 +9,11 @@ use lazy_static::lazy_static;
 
 use crate::models::GtfsData;
 
-mod models;
-mod parser;
+//mod models;
+pub mod parser;
+pub mod models;
+use log::{debug, info, trace, warn,error};
+
 lazy_static! {
     static ref gtfs_dataset: Mutex<GtfsData> = Mutex::new(Default::default());
 }
@@ -39,8 +42,8 @@ fn assert_dataset_filled(dataset: &GtfsData) {
     assert!(dataset.stops.len() > 0);
 }
 
-fn get_test_paths() -> Vec<String> {
-    ["actv_aut", "actv_nav"].iter()
+pub fn get_test_paths() -> Vec<String> {
+    ["actv_aut", "actv_nav","alilaguna"].iter()
         .map(|s| format!("./test_data/{}", s.to_owned()))
         .collect::<Vec<String>>()
 }
@@ -51,7 +54,7 @@ fn it_works() {
     let now = Instant::now();
     let path = vec![get_test_paths()[0].to_string()];
     *dataset = parser::parse_from_paths(path);
-    println!("All parsing time: {}", now.elapsed().as_millis());
+    debug!("All parsing time: {}", now.elapsed().as_millis());
 
     assert_dataset_filled(&dataset)
 }
@@ -64,7 +67,7 @@ fn parse_multiple() {
     let mut dataset = gtfs_dataset.lock().unwrap();
     let now = Instant::now();
     *dataset = parser::parse_from_paths(paths);
-    println!("All parsing time: {}", now.elapsed().as_millis());
+    debug!("All parsing time: {}", now.elapsed().as_millis());
 
     assert_dataset_filled(&dataset)
 }

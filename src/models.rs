@@ -8,6 +8,7 @@ use std::time::{Duration, Instant};
 use geo::Coordinate;
 use itertools::Itertools;
 use rayon::prelude::*;
+use log::{debug, info, trace, warn,error};
 
 pub trait Searchable {
     fn inx_of(&self, s: &str) -> usize;
@@ -15,9 +16,14 @@ pub trait Searchable {
 
 impl Searchable for Vec<&str> {
     fn inx_of(&self, s: &str) -> usize {
-        self.iter()
-            .position(|&r| r == s)
-            .expect(&format!("Missing field: {}", s))
+        match self.iter()
+            .position(|&r| r == s) {
+            None => {
+                error!("Missing field {} for string {}", s, self.join(","));
+                self.len()
+            }
+            Some(s) => s,
+        }
     }
 }
 
@@ -167,7 +173,9 @@ impl Trip {
             .collect::<Vec<&str>>()
             .par_iter()
             .map(|l| {
-                let sp: Vec<_> = l.split(",").collect();
+                // the last is a fallback in case the field is not available
+                let mut sp: Vec<&str> = l.split(",").collect::<Vec<&str>>();
+                sp.push("");
                 /*  let route_id = route_mappings
                 .get(sp[c.route_id])
                 .or(Some(&0))
@@ -211,7 +219,9 @@ pub struct ParseRouteResult {
 
 impl Route {
     fn parse_csv_line(l: &str, c: &RouteCorrespondence) -> Route {
-        let sp: Vec<_> = l.split(",").collect();
+        let mut sp: Vec<_> = l.split(",").collect();
+        sp.push("");
+
         let route_id_str = sp[c.route_id].to_string();
         /*  let route_id = att_route_inx;
         id_mapping.insert(route_id_str, route_id);
@@ -329,7 +339,9 @@ fn to_coordinates(lat: &str, lng: &str) -> Coordinate<f64> {
 
 impl Stop {
     fn parse_csv_line(l: &str, c: &StopCorrespondence) -> Stop {
-        let v = l.split(',').collect::<Vec<&str>>();
+        let mut v = l.split(',').collect::<Vec<&str>>();
+        v.push("");
+
         Stop {
             stop_id: v[c.stop_id].to_string(),
             stop_code: v[c.stop_code].to_string(),

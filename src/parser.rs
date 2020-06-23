@@ -7,6 +7,8 @@ use std::path::Path;
 use std::sync::Arc;
 use std::time::Instant;
 
+use log::{debug, info, trace, warn,error};
+
 use crate::models::{GtfsData, ParseRouteResult, Route, Stop, Trip};
 use crate::models::Shape;
 
@@ -15,7 +17,7 @@ struct Parser {
 }
 /*
 let path = env::current_dir()?;
-println!("current path: {}", path.display());
+debug!("current path: {}", path.display());
 */
 impl Parser {
     fn read_file(&self, file: &Path) -> Result<String, Error> {
@@ -36,7 +38,7 @@ impl Parser {
         let s = self.read_file(Path::new("trips.txt"))?;
         let now = Instant::now();
         let res = Trip::parse_trips(&s, route_mappings);
-        println!("trips time: {}", now.elapsed().as_millis());
+        debug!("trips time: {}", now.elapsed().as_millis());
         Ok(res)
     }
 
@@ -44,7 +46,7 @@ impl Parser {
         let s = self.read_file(Path::new("shapes.txt"))?;
         let now = Instant::now();
         let res = Shape::parse_shapes(&s);
-        println!("shape time: {}", now.elapsed().as_millis());
+        debug!("shape time: {}", now.elapsed().as_millis());
         Ok(res)
     }
 
@@ -53,7 +55,7 @@ impl Parser {
         let s = self.read_file(Path::new("stops.txt"))?;
         let now = Instant::now();
         let res = Stop::parse_stops(&s);
-        println!("stops time: {}", now.elapsed().as_millis());
+        debug!("stops time: {}", now.elapsed().as_millis());
         Ok(res)
     }
 
@@ -76,19 +78,19 @@ impl Parser {
 }
 
 pub fn parse_from_path<'a>(path: &String, dataset: &'a mut GtfsData) -> Result<&'a GtfsData, Error> {
-    let parser = Parser { path : path.to_string() };
+    let parser = Parser { path: path.to_string() };
     let mut new_dataset: GtfsData = parser.parse_all()?;
     Ok(dataset.merge_dataset(&mut new_dataset))
 }
 
 pub fn parse_from_paths(paths: Vec<String>) -> GtfsData {
     let path = env::current_dir().unwrap();
-    println!("current path: {}", path.display());
+    debug!("current path: {}", path.display());
     let mut dataset: GtfsData = Default::default();
     for path in paths {
         match parse_from_path(&path, &mut dataset) {
-            Ok(_) => { println!("{} Loaded sucessfully", path); }
-            Err(e) => { eprintln!("Error loading from {}: {}", path,e); }
+            Ok(_) => { debug!("{} Loaded sucessfully", path); }
+            Err(e) => { error!("Error loading from {}: {}", path,e); }
         }
     }
     dataset.do_postprocessing();
