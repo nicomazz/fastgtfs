@@ -1,14 +1,14 @@
+use std::cmp::Ordering;
 use std::collections::HashMap;
 use std::fmt::format;
 use std::io::Error;
 use std::rc::Rc;
 use std::sync::Arc;
-use std::time::{Duration, Instant};
 
 use geo::Coordinate;
-use itertools::Itertools;
+use itertools::{enumerate, Itertools};
+use log::error;
 use rayon::prelude::*;
-use log::{debug, info, trace, warn,error};
 
 pub trait Searchable {
     fn inx_of(&self, s: &str) -> usize;
@@ -29,6 +29,7 @@ impl Searchable for Vec<&str> {
 
 #[derive(Debug, Default)]
 pub struct GtfsData {
+    pub dataset_id: u32,
     // pub calendar: HashMap<String, Calendar>,
     // pub calendar_dates: HashMap<String, Vec<CalendarDate>>,
     pub routes: Vec<Route>,
@@ -50,15 +51,42 @@ impl GtfsData {
         assert_eq!(new_ds.stops.len(), 0);
         self
     }
+    pub fn get_routes(&self) -> &Vec<Route> {
+        &self.routes
+    }
 
-    pub fn do_postprocessing(&self) {
+    pub fn do_postprocessing(&mut self) {
+        let mut route_id = 0;
+        for (inx, route) in enumerate(&mut self.routes) {
+            route.fast_id = inx as i32;
+        }
         // todo
     }
 }
 
+impl Ord for GtfsData {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.trips.len().cmp(&other.trips.len())
+    }
+}
+
+impl PartialOrd for GtfsData {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl PartialEq for GtfsData {
+    fn eq(&self, other: &Self) -> bool {
+        self.cmp(other) == Ordering::Equal
+    }
+}
+
+impl Eq for GtfsData {}
+
 #[derive(Debug, Default)]
 pub struct Route {
-    fast_id: i64,
+    pub fast_id: i32,
     route_id: String,
     agency_id: String,
     route_short_name: String,
@@ -69,6 +97,9 @@ pub struct Route {
     route_color: String,
     route_text_color: String,
     pub trips: Vec<Arc<Trip>>,
+
+    pub dataset_index: u32,
+    pub stops: Vec<i32>,
 }
 
 #[derive(Debug)]
@@ -239,17 +270,20 @@ impl Route {
             ..Default::default()
         }
     }
-    pub fn parse_routes(s: &str) -> ParseRouteResult {
+    pub fn parse_routes(s: &str, dataset_inx: u32) -> ParseRouteResult {
         let mut lines = s.split("\r\n");
 
         let fields = lines.next().unwrap().split(",").collect();
         let c = Route::find_fields(fields);
-        let mut id_mapping: HashMap<String, u32> = HashMap::new();
-        let mut att_route_inx = 0;
+        let id_mapping: HashMap<String, u32> = HashMap::new();
         let routes = lines
             .filter(|l| l.len() > 0)
-            .map(|l| Route::parse_csv_line(l, &c))
-            .collect();
+            .map(|l| {
+                let mut r = Route::parse_csv_line(l, &c);
+                r.dataset_index = dataset_inx;
+                r
+            })
+            .collect::<Vec<Route>>();
 
         return ParseRouteResult { routes, id_mapping };
     }
@@ -315,7 +349,7 @@ impl Shape {
         //.map(|shape| (shape.shape_id.to_owned(), shape))
         //.collect::<HashMap<String, Shape>>()
     }
-    fn to_meters(km: &str) -> u64 {
+    fn _to_meters(km: &str) -> u64 {
         (km.parse::<f64>().unwrap() * 1000.0) as u64
     }
     fn find_fields(fields: Vec<&str>) -> ShapeCorrespondence {
