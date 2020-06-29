@@ -1,21 +1,20 @@
+pub mod gtfs_data;
+
 //use std::path::Path;
 // 1.4.0
 use std::sync::Mutex;
 
-
 use lazy_static::lazy_static;
 
-use crate::models::GtfsData;
-
+use crate::gtfs_data::GtfsData;
 
 //mod models;
-pub mod parser;
 pub mod models;
+pub mod parser;
 
 pub fn testing() {
     print!("it works!");
 }
-
 
 //
 // pub fn load_dataset(path: String, dataset_id: i8) {}

@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use std::fmt::format;
 use std::io::Error;
 use std::rc::Rc;
-use std::sync::Arc;
+use std::sync::{Arc, RwLock};
 
 use geo::Coordinate;
 use itertools::{enumerate, Itertools};
@@ -16,8 +16,7 @@ pub trait Searchable {
 
 impl Searchable for Vec<&str> {
     fn inx_of(&self, s: &str) -> usize {
-        match self.iter()
-            .position(|&r| r == s) {
+        match self.iter().position(|&r| r == s) {
             None => {
                 error!("Missing field {} for string {}", s, self.join(","));
                 self.len()
@@ -28,66 +27,10 @@ impl Searchable for Vec<&str> {
 }
 
 #[derive(Debug, Default)]
-pub struct GtfsData {
-    pub dataset_id: u32,
-    // pub calendar: HashMap<String, Calendar>,
-    // pub calendar_dates: HashMap<String, Vec<CalendarDate>>,
-    pub routes: Vec<Route>,
-    pub trips: Vec<Arc<Trip>>,
-    pub shapes: Vec<Shape>,
-    pub stops: Vec<Stop>,
-    //pub agencies: Vec<Agency>,
-    //pub shapes: Vec<Shape>,
-}
-
-impl GtfsData {
-    pub fn add_routes(new_routes: Vec<Route>) {}
-
-    pub fn merge_dataset(&mut self, new_ds: &mut GtfsData) -> &GtfsData {
-        self.routes.append(new_ds.routes.as_mut());
-        self.trips.append(new_ds.trips.as_mut());
-        self.shapes.append(new_ds.shapes.as_mut());
-        self.stops.append(new_ds.stops.as_mut());
-        assert_eq!(new_ds.stops.len(), 0);
-        self
-    }
-    pub fn get_routes(&self) -> &Vec<Route> {
-        &self.routes
-    }
-
-    pub fn do_postprocessing(&mut self) {
-        let mut route_id = 0;
-        for (inx, route) in enumerate(&mut self.routes) {
-            route.fast_id = inx as i32;
-        }
-        // todo
-    }
-}
-
-impl Ord for GtfsData {
-    fn cmp(&self, other: &Self) -> Ordering {
-        self.trips.len().cmp(&other.trips.len())
-    }
-}
-
-impl PartialOrd for GtfsData {
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        Some(self.cmp(other))
-    }
-}
-
-impl PartialEq for GtfsData {
-    fn eq(&self, other: &Self) -> bool {
-        self.cmp(other) == Ordering::Equal
-    }
-}
-
-impl Eq for GtfsData {}
-
-#[derive(Debug, Default)]
 pub struct Route {
     pub fast_id: i32,
-    route_id: String,
+
+    pub(crate) route_id: String,
     agency_id: String,
     route_short_name: String,
     route_long_name: String,
@@ -96,7 +39,7 @@ pub struct Route {
     route_url: String,
     route_color: String,
     route_text_color: String,
-    pub trips: Vec<Arc<Trip>>,
+    pub trips: Vec<i64>, //trip ids
 
     pub dataset_index: u32,
     pub stops: Vec<i32>,
@@ -105,9 +48,11 @@ pub struct Route {
 #[derive(Debug)]
 pub struct Trip {
     fast_route_id: i64,
-    route_id: String,
+    pub(crate) fast_trip_id: i64,
+
+    pub(crate) route_id: String,
     service_id: String,
-    trip_id: String,
+    pub trip_id: String,
     trip_headsign: String,
     trip_short_name: String,
     direction_id: String,
@@ -115,6 +60,22 @@ pub struct Trip {
     shape_id: String,
     wheelchair_accessible: String,
     //  stop_times_cursor : u64
+    pub stop_times_indexes: TripStopInfo,
+    pub dataset_index: u32,
+}
+
+// this struct defines where to find the info into the stop_times.txt
+#[derive(Debug, Default, Copy, Clone)]
+pub struct TripStopInfo {
+    start: usize,
+    end: usize,
+    pub size: u16,
+}
+
+#[derive(Debug)]
+pub struct StopTime {
+    stop: RwLock<Stop>,
+    time: i64,
 }
 
 #[derive(Debug)]
@@ -131,7 +92,9 @@ pub struct Shape {
 
 #[derive(Debug)]
 pub struct Stop {
-    stop_id: String,
+    pub(crate) fast_id: u64,
+
+    pub(crate) stop_id: String,
     stop_code: String,
     stop_name: String,
     stop_desc: String,
@@ -193,7 +156,7 @@ struct StopCorrespondence {
 }
 
 impl Trip {
-    pub fn parse_trips(s: &str, route_mappings: HashMap<String, u32>) -> Vec<Arc<Trip>> {
+    pub fn parse_trips(s: &str, dataset_inx: u32) -> Vec<Trip> {
         let mut lines = s.split("\r\n");
 
         let fields = lines.next().unwrap().split(",").collect();
@@ -212,7 +175,8 @@ impl Trip {
                 .or(Some(&0))
                 .unwrap()
                 .to_owned(); */
-                Arc::new(Trip {
+                Trip {
+                    fast_trip_id: -1,
                     fast_route_id: -1,
                     route_id: sp[c.route_id].to_string(),
                     service_id: sp[c.service_id].to_string(),
@@ -223,7 +187,9 @@ impl Trip {
                     block_id: sp[c.block_id].to_string(),
                     shape_id: sp[c.shape_id].to_string(),
                     wheelchair_accessible: sp[c.wheelchair_accessible].to_string(),
-                })
+                    stop_times_indexes: Default::default(),
+                    dataset_index: dataset_inx,
+                }
             })
             .collect()
     }
@@ -239,6 +205,85 @@ impl Trip {
             block_id: fields.inx_of("block_id"),
             shape_id: fields.inx_of("shape_id"),
             wheelchair_accessible: fields.inx_of("wheelchair_accessible"),
+        }
+    }
+
+    pub(crate) fn get_stop_times(&self) -> Vec<StopTime> {
+        unimplemented!()
+    }
+}
+
+struct StopTimesCorrespondence {
+    trip_id: usize,
+    arrival_time: usize,
+    departure_time: usize,
+    stop_id: usize,
+    stop_sequence: usize,
+    stop_headsign: usize,
+    pickup_type: usize,
+    drop_off_type: usize,
+    shape_dist_traveled: usize,
+}
+
+impl StopTime {
+    pub fn parse_stop_times(s: &str) -> HashMap<String, TripStopInfo> {
+        let mut lines = s.split("\r\n");
+
+        const NEW_LINE_SIZE: usize = 2;
+        let mut cursor = 0;
+
+        let first_line = lines.next().unwrap();
+        let fields = first_line.split(",").collect();
+        let c = Trip::find_fields(fields);
+
+        cursor += first_line.len() + NEW_LINE_SIZE;
+
+        let mut res = HashMap::<String, TripStopInfo>::new();
+        let mut last_trip_id = String::from("");
+        let mut last_start = cursor;
+        let mut last_size = 0;
+        let mut this_trip_id = "";
+        for line in lines {
+            this_trip_id = first_component(line);
+            if this_trip_id != last_trip_id {
+                res.insert(
+                    this_trip_id.to_string(),
+                    TripStopInfo {
+                        start: last_start,
+                        end: cursor,
+                        size: last_size,
+                    },
+                );
+                last_start = cursor;
+                last_size = 0;
+                last_trip_id = this_trip_id.to_string();
+            }
+            last_size += 1;
+            cursor += line.len() + NEW_LINE_SIZE;
+        }
+        res.insert(
+            this_trip_id.to_string(),
+            TripStopInfo {
+                start: last_start,
+                end: cursor,
+                size: last_size,
+            },
+        );
+
+        res
+    }
+
+    fn find_fields(fields: Vec<&str>) -> StopTimesCorrespondence {
+        StopTimesCorrespondence {
+            trip_id: fields.inx_of("trip_id"),
+            arrival_time: fields.inx_of("arrival_time"),
+            departure_time: fields.inx_of("departure_time"),
+            stop_id: fields.inx_of("stop_id"),
+            stop_sequence: fields.inx_of("stop_sequence"),
+            stop_headsign: fields.inx_of("stop_headsign"),
+            pickup_type: fields.inx_of("pickup_type"),
+            drop_off_type: fields.inx_of("drop_off_type"),
+            shape_dist_traveled: fields.inx_of("shape_dist_traveled"),
         }
     }
 }
@@ -308,10 +353,11 @@ struct ShapeInConsturction<'a> {
     shape_points_strings: Vec<&'a str>,
 }
 
+fn first_component(s: &str) -> &str {
+    return &s[..s.find(',').unwrap_or(s.len())];
+}
+
 impl Shape {
-    fn first_component(s: &str) -> &str {
-        return &s[..s.find(',').unwrap_or(s.len())];
-    }
     pub fn parse_shapes(s: &str) -> Vec<Shape> {
         let mut lines = s.split("\r\n");
 
@@ -321,7 +367,7 @@ impl Shape {
         lines
             .into_iter()
             .filter(|l| l.len() > 0)
-            .group_by(|l| Shape::first_component(l))
+            .group_by(|l| first_component(l))
             .into_iter()
             .collect::<Vec<(&str, _)>>()
             .into_iter()
@@ -388,6 +434,7 @@ impl Stop {
             parent_station: v[c.parent_station].to_string(),
             stop_timezone: v[c.stop_timezone].to_string(),
             wheelchair_boarding: v[c.wheelchair_boarding].to_string(),
+            fast_id: 0,
         }
     }
     pub fn parse_stops(s: &str) -> Vec<Stop> {
