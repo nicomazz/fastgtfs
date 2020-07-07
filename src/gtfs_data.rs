@@ -11,7 +11,7 @@ use itertools::{enumerate, Itertools};
 use log::{debug, error, info, trace, warn};
 use rayon::prelude::*;
 
-use crate::models::{Route, Shape, Stop, Trip};
+use crate::models::{Route, Shape, Stop, Trip, StopTime};
 
 #[derive(Debug, Default)]
 pub struct GtfsData {
@@ -88,6 +88,7 @@ impl GtfsData {
         assert_eq!(new_ds.stops.len(), 0);
         self
     }
+
     pub fn get_routes(&self) -> &Vec<Route> {
         &self.routes
     }
@@ -132,23 +133,26 @@ impl GtfsData {
         }
     }
     fn assign_stops_to_routes(&mut self) {
-        &self
-            .routes
-            .par_iter_mut()
-            .for_each(|r| GtfsData::preprocess_route(r));
+        // for route in self.routes.iter_mut() {
+        //     if route.trips.is_empty() {
+        //         warn!("Route {} does not have trips", route.fast_id);
+        //         return;
+        //     }
+        //     let middle_trip_id = *route.trips.get(route.trips.len()/2).unwrap() as usize;
+        //     let trip: &Trip = &self.trips[middle_trip_id];
+        //     let stop_times : Vec<StopTime> = trip.get_stop_times();
+        //     assert!(stop_times.len() != 0, "stop list for trip {} is empty", trip.trip_id);
+        //     let mut prec_time = stop_times.get(0).unwrap().time;
+        //     for stop_time in &stop_times {
+        //         route.stops.push(stop_time.stop_id);
+        //         route.times_dt.push((stop_time.time - prec_time )as u8);
+        //         prec_time = stop_time.time;
+        //     }
+        // }
     }
 
     fn build_walk_paths(&mut self) {}
     fn preprocess_stops_near_stops(&mut self) {}
-
-    fn preprocess_route(route: &mut Route) {
-        if route.trips.is_empty() {
-            warn!("Route {} does not have trips", route.fast_id);
-            return;
-        }
-        //let trip: &Trip = &*route.trips.get(route.trips.len() / 2).unwrap();
-        //let stop_times = trip.get_stop_times();
-    }
 
     pub fn get_trip(&self, id: usize) -> &Trip {
         &self.trips[id]

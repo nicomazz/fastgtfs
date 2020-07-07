@@ -1,3 +1,5 @@
+mod raw_parser;
+pub mod test_utils;
 pub mod gtfs_data;
 
 //use std::path::Path;
@@ -11,6 +13,8 @@ use crate::gtfs_data::GtfsData;
 //mod models;
 pub mod models;
 pub mod parser;
+
+pub mod raw_models;
 
 pub fn testing() {
     print!("it works!");

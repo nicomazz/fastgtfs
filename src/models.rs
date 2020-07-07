@@ -1,7 +1,7 @@
 use std::cmp::Ordering;
 use std::collections::HashMap;
 use std::fmt::format;
-use std::io::Error;
+use std::io::{Error, Seek, SeekFrom, Read};
 use std::rc::Rc;
 use std::sync::{Arc, RwLock};
 
@@ -9,6 +9,8 @@ use geo::Coordinate;
 use itertools::{enumerate, Itertools};
 use log::error;
 use rayon::prelude::*;
+use std::path::Path;
+use std::fs::File;
 
 pub trait Searchable {
     fn inx_of(&self, s: &str) -> usize;
@@ -30,7 +32,7 @@ impl Searchable for Vec<&str> {
 pub struct Route {
     pub fast_id: i32,
 
-    pub(crate) route_id: String,
+    pub route_id: String,
     agency_id: String,
     route_short_name: String,
     route_long_name: String,
@@ -43,6 +45,7 @@ pub struct Route {
 
     pub dataset_index: u32,
     pub stops: Vec<i32>,
+    pub times_dt: Vec<u8>, // time in minutes between each stop
 }
 
 #[derive(Debug)]
@@ -60,8 +63,10 @@ pub struct Trip {
     shape_id: String,
     wheelchair_accessible: String,
     //  stop_times_cursor : u64
+
     pub stop_times_indexes: TripStopInfo,
     pub dataset_index: u32,
+    pub stop_times: Vec<StopTime>,
 }
 
 // this struct defines where to find the info into the stop_times.txt
@@ -74,8 +79,8 @@ pub struct TripStopInfo {
 
 #[derive(Debug)]
 pub struct StopTime {
-    stop: RwLock<Stop>,
-    time: i64,
+    pub(crate) stop_id: String,
+    pub(crate) time: i64,
 }
 
 #[derive(Debug)]
@@ -189,6 +194,7 @@ impl Trip {
                     wheelchair_accessible: sp[c.wheelchair_accessible].to_string(),
                     stop_times_indexes: Default::default(),
                     dataset_index: dataset_inx,
+                    stop_times: vec![]
                 }
             })
             .collect()
@@ -209,7 +215,19 @@ impl Trip {
     }
 
     pub(crate) fn get_stop_times(&self) -> Vec<StopTime> {
-        unimplemented!()
+        vec![]
+    //     let path = Path::new("stop_times.txt");
+    //     let mut file =  File::open(&path)?;
+    //     file.seek(SeekFrom::start(&self.stop_times_indexes.start));
+    //     let indexes = &self.stop_times_indexes;
+    //     let mut buffer = vec![0; indexes.end-indexes.start];
+    //     ///
+    //     ///     // read exactly 10 bytes
+    //     ///     f.read_exact(&mut buffer)?;
+    //     let readed = file.read_exact(buffer.as_mut_slice());
+    //
+    //     readed.split("\r\n").map(|s| StopTime::parse_line(s)).collect()
+    //
     }
 }
 
@@ -286,8 +304,23 @@ impl StopTime {
             shape_dist_traveled: fields.inx_of("shape_dist_traveled"),
         }
     }
+
+    fn parse_line(line : &str) -> StopTime {
+      //  trip_id,arrival_time,departure_time,stop_id,stop_sequence,stop_headsign,pickup_type,drop_off_type,shape_dist_traveled
+      //  12661,05:00:00,05:00:00,723,1,VENEZIA,0,1,
+        // TODO make this aware of the dataset, without hardcoded indexes
+        //let components = line.split(",").collect();
+        StopTime {
+            stop_id: "".to_string(),//components.get(3).unwrap().to_string(),
+            time: 0,//str_time_to_int(components.get(2)),
+        }
+    }
 }
 
+fn str_time_to_int(s: &str) -> i64 {
+    // 05:00:00 -> 5 * 60 * 60
+    return 42;
+}
 pub struct ParseRouteResult {
     pub(crate) routes: Vec<Route>,
     pub(crate) id_mapping: HashMap<String, u32>,
