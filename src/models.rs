@@ -30,138 +30,50 @@ impl Searchable for Vec<&str> {
 
 #[derive(Debug, Default)]
 pub struct Route {
-    pub fast_id: i32,
+    pub route_id: i64,
+    pub(crate) route_short_name: String,
+    pub(crate) route_long_name: String,
 
-    pub route_id: String,
-    agency_id: String,
-    route_short_name: String,
-    route_long_name: String,
-    route_desc: String,
-    route_type: String,
-    route_url: String,
-    route_color: String,
-    route_text_color: String,
+    //pub times_dt: Vec<u8>, // time in minutes between each stop
     pub trips: Vec<i64>, //trip ids
-
-    pub dataset_index: u32,
-    pub stops: Vec<i32>,
-    pub times_dt: Vec<u8>, // time in minutes between each stop
+    pub dataset_index: u64,
+    pub stops: Vec<i64>,
 }
 
 #[derive(Debug)]
 pub struct Trip {
-    fast_route_id: i64,
-    pub(crate) fast_trip_id: i64,
+    pub route_id: i64,
+    pub trip_id: i64,
+    pub shape_id: i64,
+    pub stop_times_id: i64, // todo: this points to a vec<StopTime>
+    pub start_time : i64, // in seconds since midnight. To get all stop times use stop_times_id and add the start time to each.
 
-    pub(crate) route_id: String,
-    service_id: String,
-    pub trip_id: String,
-    trip_headsign: String,
-    trip_short_name: String,
-    direction_id: String,
-    block_id: String,
-    shape_id: String,
-    wheelchair_accessible: String,
-    //  stop_times_cursor : u64
+    pub(crate) service_id: String,
+    pub(crate) trip_headsign: String,
+    pub(crate) trip_short_name: String,
+    pub(crate) direction_id: String,
+    pub(crate) block_id: String,
+    pub(crate) wheelchair_accessible: String,
 
-    pub stop_times_indexes: TripStopInfo,
-    pub dataset_index: u32,
-    pub stop_times: Vec<StopTime>,
 }
 
-// this struct defines where to find the info into the stop_times.txt
-#[derive(Debug, Default, Copy, Clone)]
-pub struct TripStopInfo {
-    start: usize,
-    end: usize,
-    pub size: u16,
-}
-
-#[derive(Debug)]
-pub struct StopTime {
-    pub(crate) stop_id: String,
-    pub(crate) time: i64,
-}
 
 #[derive(Debug)]
 pub struct Shape {
-    /*
-        shape_id,shape_pt_lat,shape_pt_lon,shape_pt_sequence,shape_dist_traveled
-    1_0_1,45.417561,12.368731,0,0.0
-    1_0_1,45.417545,12.368747,1,0.0021125906752124325
-    1_0_1,45.417423,12.368521,2,0.02454935679179161
-     */
-    shape_id: String,
-    points: Vec<Coordinate<f64>>,
+    pub(crate) shape_id: u64,
+    pub(crate) points: Vec<Coordinate<f64>>,
 }
 
 #[derive(Debug)]
 pub struct Stop {
-    pub(crate) fast_id: u64,
-
-    pub(crate) stop_id: String,
-    stop_code: String,
+    pub stop_id: i64,
     stop_name: String,
-    stop_desc: String,
     stop_pos: Coordinate<f64>,
-    zone_id: String,
-    stop_url: String,
-    location_type: String,
-    parent_station: String,
     stop_timezone: String,
-    wheelchair_boarding: String,
-}
-
-struct RouteCorrespondence {
-    route_id: usize,
-    agency_id: usize,
-    route_short_name: usize,
-    route_long_name: usize,
-    route_desc: usize,
-    route_type: usize,
-    route_url: usize,
-    route_color: usize,
-    route_text_color: usize,
-}
-
-struct TripCorrespondence {
-    route_id: usize,
-    service_id: usize,
-    trip_id: usize,
-    trip_headsign: usize,
-    trip_short_name: usize,
-    direction_id: usize,
-    block_id: usize,
-    shape_id: usize,
-    wheelchair_accessible: usize,
-}
-
-struct ShapeCorrespondence {
-    shape_id: usize,
-    shape_pt_lat: usize,
-    shape_pt_lon: usize,
-    shape_pt_sequence: usize,
-    shape_dist_traveled: usize,
-}
-// stop_id,stop_code,stop_name,stop_desc,stop_lat,stop_lon,zone_id,stop_url,location_type,parent_station,stop_timezone,wheelchair_boarding
-
-struct StopCorrespondence {
-    stop_id: usize,
-    stop_code: usize,
-    stop_name: usize,
-    stop_desc: usize,
-    stop_lat: usize,
-    stop_lon: usize,
-    zone_id: usize,
-    stop_url: usize,
-    location_type: usize,
-    parent_station: usize,
-    stop_timezone: usize,
-    wheelchair_boarding: usize,
 }
 
 impl Trip {
-    pub fn parse_trips(s: &str, dataset_inx: u32) -> Vec<Trip> {
+    /*pub fn parse_trips(s: &str, dataset_inx: u32) -> Vec<Trip> {
         let mut lines = s.split("\r\n");
 
         let fields = lines.next().unwrap().split(",").collect();
@@ -198,124 +110,13 @@ impl Trip {
                 }
             })
             .collect()
-    }
-
-    fn find_fields(fields: Vec<&str>) -> TripCorrespondence {
-        TripCorrespondence {
-            route_id: fields.inx_of("route_id"),
-            service_id: fields.inx_of("service_id"),
-            trip_id: fields.inx_of("trip_id"),
-            trip_headsign: fields.inx_of("trip_headsign"),
-            trip_short_name: fields.inx_of("trip_short_name"),
-            direction_id: fields.inx_of("direction_id"),
-            block_id: fields.inx_of("block_id"),
-            shape_id: fields.inx_of("shape_id"),
-            wheelchair_accessible: fields.inx_of("wheelchair_accessible"),
-        }
-    }
+    }*/
 
     pub(crate) fn get_stop_times(&self) -> Vec<StopTime> {
         vec![]
-    //     let path = Path::new("stop_times.txt");
-    //     let mut file =  File::open(&path)?;
-    //     file.seek(SeekFrom::start(&self.stop_times_indexes.start));
-    //     let indexes = &self.stop_times_indexes;
-    //     let mut buffer = vec![0; indexes.end-indexes.start];
-    //     ///
-    //     ///     // read exactly 10 bytes
-    //     ///     f.read_exact(&mut buffer)?;
-    //     let readed = file.read_exact(buffer.as_mut_slice());
-    //
-    //     readed.split("\r\n").map(|s| StopTime::parse_line(s)).collect()
-    //
     }
 }
 
-struct StopTimesCorrespondence {
-    trip_id: usize,
-    arrival_time: usize,
-    departure_time: usize,
-    stop_id: usize,
-    stop_sequence: usize,
-    stop_headsign: usize,
-    pickup_type: usize,
-    drop_off_type: usize,
-    shape_dist_traveled: usize,
-}
-
-impl StopTime {
-    pub fn parse_stop_times(s: &str) -> HashMap<String, TripStopInfo> {
-        let mut lines = s.split("\r\n");
-
-        const NEW_LINE_SIZE: usize = 2;
-        let mut cursor = 0;
-
-        let first_line = lines.next().unwrap();
-        let fields = first_line.split(",").collect();
-        let c = Trip::find_fields(fields);
-
-        cursor += first_line.len() + NEW_LINE_SIZE;
-
-        let mut res = HashMap::<String, TripStopInfo>::new();
-        let mut last_trip_id = String::from("");
-        let mut last_start = cursor;
-        let mut last_size = 0;
-        let mut this_trip_id = "";
-        for line in lines {
-            this_trip_id = first_component(line);
-            if this_trip_id != last_trip_id {
-                res.insert(
-                    this_trip_id.to_string(),
-                    TripStopInfo {
-                        start: last_start,
-                        end: cursor,
-                        size: last_size,
-                    },
-                );
-                last_start = cursor;
-                last_size = 0;
-                last_trip_id = this_trip_id.to_string();
-            }
-            last_size += 1;
-            cursor += line.len() + NEW_LINE_SIZE;
-        }
-        res.insert(
-            this_trip_id.to_string(),
-            TripStopInfo {
-                start: last_start,
-                end: cursor,
-                size: last_size,
-            },
-        );
-
-        res
-    }
-
-    fn find_fields(fields: Vec<&str>) -> StopTimesCorrespondence {
-        StopTimesCorrespondence {
-            trip_id: fields.inx_of("trip_id"),
-            arrival_time: fields.inx_of("arrival_time"),
-            departure_time: fields.inx_of("departure_time"),
-            stop_id: fields.inx_of("stop_id"),
-            stop_sequence: fields.inx_of("stop_sequence"),
-            stop_headsign: fields.inx_of("stop_headsign"),
-            pickup_type: fields.inx_of("pickup_type"),
-            drop_off_type: fields.inx_of("drop_off_type"),
-            shape_dist_traveled: fields.inx_of("shape_dist_traveled"),
-        }
-    }
-
-    fn parse_line(line : &str) -> StopTime {
-      //  trip_id,arrival_time,departure_time,stop_id,stop_sequence,stop_headsign,pickup_type,drop_off_type,shape_dist_traveled
-      //  12661,05:00:00,05:00:00,723,1,VENEZIA,0,1,
-        // TODO make this aware of the dataset, without hardcoded indexes
-        //let components = line.split(",").collect();
-        StopTime {
-            stop_id: "".to_string(),//components.get(3).unwrap().to_string(),
-            time: 0,//str_time_to_int(components.get(2)),
-        }
-    }
-}
 
 fn str_time_to_int(s: &str) -> i64 {
     // 05:00:00 -> 5 * 60 * 60
@@ -327,7 +128,7 @@ pub struct ParseRouteResult {
 }
 
 impl Route {
-    fn parse_csv_line(l: &str, c: &RouteCorrespondence) -> Route {
+    /*fn parse_csv_line(l: &str, c: &RouteCorrespondence) -> Route {
         let mut sp: Vec<_> = l.split(",").collect();
         sp.push("");
 
@@ -347,8 +148,8 @@ impl Route {
             route_text_color: sp[c.route_text_color].to_string(),
             ..Default::default()
         }
-    }
-    pub fn parse_routes(s: &str, dataset_inx: u32) -> ParseRouteResult {
+    }*/
+    /*pub fn parse_routes(s: &str, dataset_inx: u32) -> ParseRouteResult {
         let mut lines = s.split("\r\n");
 
         let fields = lines.next().unwrap().split(",").collect();
@@ -364,21 +165,7 @@ impl Route {
             .collect::<Vec<Route>>();
 
         return ParseRouteResult { routes, id_mapping };
-    }
-
-    fn find_fields(fields: Vec<&str>) -> RouteCorrespondence {
-        RouteCorrespondence {
-            route_id: fields.inx_of("route_id"),
-            agency_id: fields.inx_of("agency_id"),
-            route_short_name: fields.inx_of("route_short_name"),
-            route_long_name: fields.inx_of("route_long_name"),
-            route_desc: fields.inx_of("route_desc"),
-            route_type: fields.inx_of("route_type"),
-            route_url: fields.inx_of("route_url"),
-            route_color: fields.inx_of("route_color"),
-            route_text_color: fields.inx_of("route_text_color"),
-        }
-    }
+    }*/
 }
 
 struct ShapeInConsturction<'a> {
@@ -392,36 +179,37 @@ fn first_component(s: &str) -> &str {
 
 impl Shape {
     pub fn parse_shapes(s: &str) -> Vec<Shape> {
-        let mut lines = s.split("\r\n");
-
-        let fields = lines.next().unwrap().split(",").collect();
-        let c = Shape::find_fields(fields);
-
-        lines
-            .into_iter()
-            .filter(|l| l.len() > 0)
-            .group_by(|l| first_component(l))
-            .into_iter()
-            .collect::<Vec<(&str, _)>>()
-            .into_iter()
-            .map(|(shape_id, vals)| ShapeInConsturction {
-                id: shape_id.to_string(),
-                shape_points_strings: vals.into_iter().collect::<Vec<&str>>(),
-            })
-            .collect::<Vec<ShapeInConsturction>>()
-            .par_iter()
-            .map(|sh| {
-                let shape_id = String::from(&sh.id);
-                Shape {
-                    shape_id,
-                    points: (&sh.shape_points_strings)
-                        .into_iter()
-                        .map(|l| l.split(',').collect())
-                        .map(|v: Vec<&str>| to_coordinates(v[c.shape_pt_lat], v[c.shape_pt_lon]))
-                        .collect(),
-                }
-            })
-            .collect::<Vec<Shape>>()
+        vec![]
+        // let mut lines = s.split("\r\n");
+        //
+        // let fields = lines.next().unwrap().split(",").collect();
+        // let c = Shape::find_fields(fields);
+        //
+        // lines
+        //     .into_iter()
+        //     .filter(|l| l.len() > 0)
+        //     .group_by(|l| first_component(l))
+        //     .into_iter()
+        //     .collect::<Vec<(&str, _)>>()
+        //     .into_iter()
+        //     .map(|(shape_id, vals)| ShapeInConsturction {
+        //         id: shape_id.to_string(),
+        //         shape_points_strings: vals.into_iter().collect::<Vec<&str>>(),
+        //     })
+        //     .collect::<Vec<ShapeInConsturction>>()
+        //     .par_iter()
+        //     .map(|sh| {
+        //         let shape_id = String::from(&sh.id);
+        //         Shape {
+        //             shape_id,
+        //             points: (&sh.shape_points_strings)
+        //                 .into_iter()
+        //                 .map(|l| l.split(',').collect())
+        //                 .map(|v: Vec<&str>| to_coordinates(v[c.shape_pt_lat], v[c.shape_pt_lon]))
+        //                 .collect(),
+        //         }
+        //     })
+        //     .collect::<Vec<Shape>>()
         // .map(|shape| (shape.shape_id.to_owned(), shape))
         //.collect::<HashMap<String, Shape>>()
 
@@ -451,53 +239,5 @@ fn to_coordinates(lat: &str, lng: &str) -> Coordinate<f64> {
 }
 
 impl Stop {
-    fn parse_csv_line(l: &str, c: &StopCorrespondence) -> Stop {
-        let mut v = l.split(',').collect::<Vec<&str>>();
-        v.push("");
 
-        Stop {
-            stop_id: v[c.stop_id].to_string(),
-            stop_code: v[c.stop_code].to_string(),
-            stop_name: v[c.stop_name].to_string(),
-            stop_desc: v[c.stop_desc].to_string(),
-            stop_pos: to_coordinates(v[c.stop_lat], v[c.stop_lon]),
-            zone_id: v[c.zone_id].to_string(),
-            stop_url: v[c.stop_url].to_string(),
-            location_type: v[c.location_type].to_string(),
-            parent_station: v[c.parent_station].to_string(),
-            stop_timezone: v[c.stop_timezone].to_string(),
-            wheelchair_boarding: v[c.wheelchair_boarding].to_string(),
-            fast_id: 0,
-        }
-    }
-    pub fn parse_stops(s: &str) -> Vec<Stop> {
-        let mut lines = s.split("\r\n");
-
-        let fields = lines.next().unwrap().split(",").collect();
-        let c = Stop::find_fields(fields);
-
-        lines
-            .collect::<Vec<&str>>()
-            .par_iter()
-            .filter(|l| l.len() > 0)
-            .map(|l| Stop::parse_csv_line(l, &c))
-            .collect()
-    }
-
-    fn find_fields(fields: Vec<&str>) -> StopCorrespondence {
-        StopCorrespondence {
-            stop_id: fields.inx_of("stop_id"),
-            stop_code: fields.inx_of("stop_code"),
-            stop_name: fields.inx_of("stop_name"),
-            stop_desc: fields.inx_of("stop_desc"),
-            stop_lat: fields.inx_of("stop_lat"),
-            stop_lon: fields.inx_of("stop_lon"),
-            zone_id: fields.inx_of("zone_id"),
-            stop_url: fields.inx_of("stop_url"),
-            location_type: fields.inx_of("location_type"),
-            parent_station: fields.inx_of("parent_station"),
-            stop_timezone: fields.inx_of("stop_timezone"),
-            wheelchair_boarding: fields.inx_of("wheelchair_boarding"),
-        }
-    }
 }

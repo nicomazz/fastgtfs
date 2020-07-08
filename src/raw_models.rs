@@ -5,6 +5,7 @@ use std::io::Read;
 use std::path::Path;
 use std::process;
 
+use csv::{Reader, DeserializeRecordsIter};
 use log::{debug, error, info, trace, warn};
 use serde::Deserialize;
 
@@ -112,3 +113,9 @@ pub fn parse_gtfs<T: for<'de> serde::Deserialize<'de>>(path: &Path) -> Result<Ve
         .filter_map(Result::ok)
         .collect::<Vec<T>>())
 }
+
+pub fn parse_gtfs_iter<T: for<'de> serde::Deserialize<'de>>(path: &Path) -> DeserializeRecordsIter<File,T>{
+    let mut file = File::open(&path).unwrap();
+    csv::Reader::from_reader(file).deserialize()
+}
+

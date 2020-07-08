@@ -48,16 +48,17 @@ impl Parser {
 
     pub(crate) fn read_routes(&self) -> Result<ParseRouteResult, Error> {
         let s = self.read_file(Path::new("routes.txt"))?;
-        let res = Route::parse_routes(&s, self.inx);
-        Ok(res)
+        //let res = Route::parse_routes(&s, self.inx);
+        //Ok(res)
+        Error()
     }
 
     pub(crate) fn read_trips(&self) -> Result<Vec<Trip>, Error> {
         let s = self.read_file(Path::new("trips.txt"))?;
         let now = Instant::now();
-        let res = Trip::parse_trips(&s, self.inx);
+       // let res = Trip::parse_trips(&s, self.inx);
         debug!("trips time: {}", now.elapsed().as_millis());
-        Ok(res)
+        Ok(vec![])
     }
 
     pub(crate) fn read_stop_times(&self) -> Result<HashMap<String, TripStopInfo>, Error> {
@@ -79,9 +80,10 @@ impl Parser {
     pub fn read_stops(&self) -> Result<Vec<Stop>, Error> {
         let s = self.read_file(Path::new("stops.txt"))?;
         let now = Instant::now();
-        let res = Stop::parse_stops(&s);
+        //let res = Stop::parse_stops(&s);
         debug!("stops time: {}", now.elapsed().as_millis());
-        Ok(res)
+        //Ok(res)
+        Ok(vec![])
     }
 
     pub fn parse_all(&self) -> Result<GtfsData, Error> {
@@ -90,14 +92,14 @@ impl Parser {
         let mut trips: Vec<Trip> = self.read_trips()?;
         let shapes = self.read_shapes()?;
         let stops = self.read_stops()?;
-        for trip in trips.iter_mut() {
-            let t: &mut Trip = trip;
-            let this_trip_index = stop_times.get(&t.trip_id).unwrap();
-            t.stop_times_indexes = *this_trip_index;
-            // let route_id = *routes.id_mapping.get(&t.route_id).unwrap() as usize;
-            // let route: &mut Route = routes.routes.get(route_id).unwrap().borrow_mut();
-            // route.trips.push(t.fast_trip_id);
-        }
+        // for trip in trips.iter_mut() {
+        //     let t: &mut Trip = trip;
+        //     let this_trip_index = stop_times.get(&t.trip_id).unwrap();
+        //     t.stop_times_indexes = *this_trip_index;
+        //     // let route_id = *routes.id_mapping.get(&t.route_id).unwrap() as usize;
+        //     // let route: &mut Route = routes.routes.get(route_id).unwrap().borrow_mut();
+        //     // route.trips.push(t.fast_trip_id);
+        // }
 
         Ok(GtfsData {
             dataset_id: self.inx,

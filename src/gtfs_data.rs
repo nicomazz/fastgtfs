@@ -22,15 +22,30 @@ pub struct GtfsData {
     pub trips: Vec<Trip>,
     pub shapes: Vec<Shape>,
     pub stops: Vec<Stop>,
+
+    // each trip has a stop time associated, with a start time.
+    pub stop_times: Vec<StopTimes>,
     //pub agencies: Vec<Agency>,
 
-    //temporary, while still using string ids
-    pub routes_name_to_inx: HashMap<String, usize>,
-    pub trip_name_to_inx: HashMap<String, usize>,
-    pub shape_name_to_inx: HashMap<String, usize>,
-    pub stop_name_to_inx: HashMap<String, usize>,
+    // //temporary, while still using string ids
+    // pub routes_name_to_inx: HashMap<String, usize>,
+    // pub trip_name_to_inx: HashMap<String, usize>,
+    // pub shape_name_to_inx: HashMap<String, usize>,
+    // pub stop_name_to_inx: HashMap<String, usize>,
 }
 
+// contains a list of stops, and the time for each in seconds (the first has time 0)
+#[derive(Debug)]
+pub struct StopTimes {
+    pub(crate) stop_times : Vec<StopTime>
+}
+
+#[derive(Debug)]
+pub struct StopTime {
+    pub stop_id: u64,
+    pub time: i64, // in seconds
+}
+/*
 #[derive(Default, Clone, Copy)]
 struct InitialInx {
     routes: usize,
@@ -46,7 +61,7 @@ impl InitialInx {
         self.trips += ds.trips.len();
         self.shapes += ds.shapes.len();
     }
-}
+}*/
 
 impl GtfsData {
     pub fn merge_datasets( datasets: &mut Vec<GtfsData>) -> GtfsData {
@@ -94,44 +109,44 @@ impl GtfsData {
     }
 
     fn do_postprocessing(&mut self, initial_inx: &InitialInx) {
-        self.normalize_stop_ids(initial_inx.stops);
-        self.normalize_routes(initial_inx.routes);
-        self.normalize_trips(initial_inx);
-        self.assign_stops_to_routes();
-        self.build_walk_paths();
-        self.preprocess_stops_near_stops();
+        // self.normalize_stop_ids(initial_inx.stops);
+        // self.normalize_routes(initial_inx.routes);
+        // self.normalize_trips(initial_inx);
+        // self.assign_stops_to_routes();
+        // self.build_walk_paths();
+        // self.preprocess_stops_near_stops();
     }
 
-    fn normalize_stop_ids(&mut self, initial_inx: usize) {
-        &self.stops.sort_by(|a, b| a.stop_id.cmp(&b.stop_id));
-        for (inx, stop) in enumerate(&mut self.stops) {
-            stop.fast_id = (initial_inx + inx) as u64;
-            self.stop_name_to_inx
-                .insert(stop.stop_id.to_string(), stop.fast_id as usize);
-        }
-    }
-    fn normalize_routes(&mut self, initial_inx: usize) -> HashMap<String, i32> {
-        let mut res = HashMap::<String, i32>::new();
-        for (inx, r) in enumerate(&mut self.routes) {
-            r.fast_id = (initial_inx + inx) as i32;
-            self.routes_name_to_inx
-                .insert(r.route_id.clone(), r.fast_id as usize);
-        }
-        res
-    }
-    fn normalize_trips(&mut self, initial_inx: &InitialInx) {
-        for (inx, t) in enumerate(&mut self.trips) {
-            let route_id = *self.routes_name_to_inx.get(&t.route_id).unwrap() - initial_inx.routes;
-            let route = self.routes.get_mut(route_id);
-            match route {
-                None => {println!("Route {} not found!",route_id); continue;},
-                Some(_) => {},
-            }
-            let r: &mut Route = route.unwrap();
-            t.fast_trip_id = (initial_inx.trips + inx + 1) as i64;
-            r.trips.push(t.fast_trip_id);
-        }
-    }
+    // fn normalize_stop_ids(&mut self, initial_inx: usize) {
+    //     &self.stops.sort_by(|a, b| a.stop_id.cmp(&b.stop_id));
+    //     for (inx, stop) in enumerate(&mut self.stops) {
+    //         stop.fast_id = (initial_inx + inx) as u64;
+    //         self.stop_name_to_inx
+    //             .insert(stop.stop_id.to_string(), stop.fast_id as usize);
+    //     }
+    // }
+    // fn normalize_routes(&mut self, initial_inx: usize) -> HashMap<String, i32> {
+    //     let mut res = HashMap::<String, i32>::new();
+    //     for (inx, r) in enumerate(&mut self.routes) {
+    //         r.fast_id = (initial_inx + inx) as i32;
+    //         self.routes_name_to_inx
+    //             .insert(r.route_id.clone(), r.fast_id as usize);
+    //     }
+    //     res
+    // }
+    // fn normalize_trips(&mut self, initial_inx: &InitialInx) {
+    //     for (inx, t) in enumerate(&mut self.trips) {
+    //         let route_id = *self.routes_name_to_inx.get(&t.route_id).unwrap() - initial_inx.routes;
+    //         let route = self.routes.get_mut(route_id);
+    //         match route {
+    //             None => {println!("Route {} not found!",route_id); continue;},
+    //             Some(_) => {},
+    //         }
+    //         let r: &mut Route = route.unwrap();
+    //         t.fast_trip_id = (initial_inx.trips + inx + 1) as i64;
+    //         r.trips.push(t.fast_trip_id);
+    //     }
+    // }
     fn assign_stops_to_routes(&mut self) {
         // for route in self.routes.iter_mut() {
         //     if route.trips.is_empty() {
