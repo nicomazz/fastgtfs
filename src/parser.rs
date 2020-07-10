@@ -1,22 +1,22 @@
 use core::sync::atomic;
+use std::borrow::BorrowMut;
 use std::collections::HashMap;
 use std::env;
 use std::fs::File;
 use std::io::Error;
 use std::io::Read;
 use std::path::Path;
+use std::sync::atomic::AtomicUsize;
 use std::sync::RwLock;
 use std::time::Instant;
 
 use log::{debug, error, info, trace, warn};
 
 use crate::gtfs_data::GtfsData;
-use crate::models::{ParseRouteResult, Route, Stop, StopTime, Trip, TripStopInfo};
-
+use crate::models::{ParseRouteResult, Route, Stop, Trip};
 use crate::models::Shape;
-use std::borrow::BorrowMut;
 
-static COUNTER: atomic::AtomicUsize = atomic::ATOMIC_USIZE_INIT;
+static COUNTER: atomic::AtomicUsize = AtomicUsize::new(0);
 
 struct Parser {
     path: String,
@@ -46,28 +46,23 @@ impl Parser {
         Ok(s)
     }
 
-    pub(crate) fn read_routes(&self) -> Result<ParseRouteResult, Error> {
-        let s = self.read_file(Path::new("routes.txt"))?;
-        //let res = Route::parse_routes(&s, self.inx);
-        //Ok(res)
-        Error()
-    }
 
     pub(crate) fn read_trips(&self) -> Result<Vec<Trip>, Error> {
         let s = self.read_file(Path::new("trips.txt"))?;
         let now = Instant::now();
-       // let res = Trip::parse_trips(&s, self.inx);
+        // let res = Trip::parse_trips(&s, self.inx);
         debug!("trips time: {}", now.elapsed().as_millis());
         Ok(vec![])
     }
 
-    pub(crate) fn read_stop_times(&self) -> Result<HashMap<String, TripStopInfo>, Error> {
-        let s = self.read_file(Path::new("stop_times.txt"))?;
-        let now = Instant::now();
-        let res = StopTime::parse_stop_times(&s);
-        debug!("stop times time: {}", now.elapsed().as_millis());
-        Ok(res)
-    }
+    // pub(crate) fn read_stop_times(&self) -> Result<HashMap<String, TripStopInfo>, Error> {
+    //     let s = self.read_file(Path::new("stop_times.txt"))?;
+    //     let now = Instant::now();
+    //     // let res = StopTime::parse_stop_times(&s);
+    //     // debug!("stop times time: {}", now.elapsed().as_millis());
+    //     // Ok(res)
+    //     Error()
+    // }
 
     pub fn read_shapes(&self) -> Result<Vec<Shape>, Error> {
         let s = self.read_file(Path::new("shapes.txt"))?;
@@ -87,8 +82,8 @@ impl Parser {
     }
 
     pub fn parse_all(&self) -> Result<GtfsData, Error> {
-        let mut routes = self.read_routes()?;
-        let stop_times: HashMap<String, TripStopInfo> = self.read_stop_times()?;
+        // let mut routes = self.read_routes()?;
+        // let stop_times: HashMap<String, TripStopInfo> = self.read_stop_times()?;
         let mut trips: Vec<Trip> = self.read_trips()?;
         let shapes = self.read_shapes()?;
         let stops = self.read_stops()?;
@@ -103,7 +98,7 @@ impl Parser {
 
         Ok(GtfsData {
             dataset_id: self.inx,
-            routes: routes.routes,
+            routes: vec![],
             shapes,
             trips,
             stops,

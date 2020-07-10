@@ -6,9 +6,9 @@ use std::rc::Rc;
 use std::sync::{Arc, RwLock};
 
 use geo::Coordinate;
-use itertools::{enumerate, Itertools};
+use itertools::{enumerate};
 use log::error;
-use rayon::prelude::*;
+
 use std::path::Path;
 use std::fs::File;
 
@@ -112,9 +112,6 @@ impl Trip {
             .collect()
     }*/
 
-    pub(crate) fn get_stop_times(&self) -> Vec<StopTime> {
-        vec![]
-    }
 }
 
 
@@ -216,10 +213,10 @@ impl Shape {
         //.map(|shape| (shape.shape_id.to_owned(), shape))
         //.collect::<HashMap<String, Shape>>()
     }
-    fn _to_meters(km: &str) -> u64 {
+    /*fn _to_meters(km: &str) -> u64 {
         (km.parse::<f64>().unwrap() * 1000.0) as u64
-    }
-    fn find_fields(fields: Vec<&str>) -> ShapeCorrespondence {
+    }*/
+    /*fn find_fields(fields: Vec<&str>) -> ShapeCorrespondence {
         ShapeCorrespondence {
             shape_id: fields.inx_of("shape_id"),
             shape_pt_lat: fields.inx_of("shape_pt_lat"),
@@ -227,10 +224,10 @@ impl Shape {
             shape_pt_sequence: fields.inx_of("shape_pt_sequence"),
             shape_dist_traveled: fields.inx_of("shape_dist_traveled"),
         }
-    }
+    }*/
 }
 
-fn to_coordinates(lat: &str, lng: &str) -> Coordinate<f64> {
+pub fn to_coordinates(lat: &str, lng: &str) -> Coordinate<f64> {
     //println!("lat {}, lng:{}",lat,lng);
     Coordinate {
         x: lat.parse::<f64>().unwrap_or(0.0),

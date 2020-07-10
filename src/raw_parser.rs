@@ -8,8 +8,8 @@ use itertools::Itertools;
 use rayon::iter::IntoParallelRefIterator;
 
 use crate::gtfs_data::{GtfsData, StopTime, StopTimes};
-use crate::models::{Route, Shape, Trip};
-use crate::raw_models::{parse_gtfs, parse_gtfs_iter, RawRoute, RawShape, RawStop, RawStopTime, RawTrip};
+use crate::models::{Route, Shape, to_coordinates, Trip};
+use crate::raw_models::{parse_gtfs, RawRoute, RawShape, RawStop, RawStopTime, RawTrip};
 
 struct RawParser {
     paths: Vec<String>,
@@ -41,11 +41,10 @@ fn str_time_to_seconds(s: &str) -> i64 {
 }
 
 impl RawParser {
-    pub fn parse(&mut self) -> Result<GtfsData, Error> {
-        for path in paths {
-            self.parse_path(path);
+    pub fn parse(&mut self) {
+        for path in self.paths.clone() {
+            self.parse_path(Path::new(&path));
         }
-        dataset
     }
 
     fn parse_path(&mut self, path: &Path) {
@@ -58,29 +57,29 @@ impl RawParser {
     fn parse_stop_times(&mut self, path: &Path) {
         let stop_times_path = Path::new(&path).join(Path::new("stop_times.txt"));
         // Vec<(Trip_id, Vec<RawStopTime>)>
-        let grouped_trips: Vec<(&str, _)> = parse_gtfs_iter::<RawStopTime>(&shape_path)
+        let grouped_trips = parse_gtfs::<RawStopTime>(&stop_times_path).unwrap()
             .into_iter()
-            .filter_map(Result::ok)
-            .group_by(|l: RawStopTime| l.trip_id)
-            .collect::<Vec<(&str, _)>>();
+            //.filter_map(Result::ok)
+            .group_by(|l| l.trip_id.to_string());
 
 
         let stop_times = grouped_trips
             .into_iter()
-            .par_iter()
-            .map(|(trip_id, raw_stop_times)| self.create_stop_times(trip_id, raw_stop_times));
-        
-        stop_times.for_each(|st: StopTimeInConstruction| {
-            let stop_time_id = self.add_stop_times(st.stop_times);
-            let trip_id = self.trip_name_to_inx.get(&st.trip_id).unwrap();
-            let trip : &mut Trip = self.dataset.trips.get_mut(trip_id).unwrap();
-            trip.stop_times_id = stop_time_id as i64;
-            trip.start_time = st.start_time;
-        })
+            .map(|(trip_id, raw_stop_times)|
+                self.create_stop_times(trip_id.to_string(), raw_stop_times.into_iter().collect()))
+            .collect::<Vec<StopTimeInConstruction>>();
+
+        stop_times.into_iter().for_each(|st: StopTimeInConstruction| {
+                let stop_time_id = self.add_stop_times(st.stop_times);
+                let trip_id = *self.trip_name_to_inx.get(&st.trip_id).unwrap();
+                let trip: &mut Trip = self.dataset.trips.get_mut(trip_id).unwrap();
+                trip.stop_times_id = stop_time_id as i64;
+                trip.start_time = st.start_time;
+            });
     }
 
 
-    fn create_stop_times(&self, trip_id: String, raw_stop_times: Vec<RawStopTime>) -> StopTimeInConstruction {
+    fn create_stop_times(&mut self, trip_id: String, raw_stop_times: Vec<RawStopTime>) -> StopTimeInConstruction {
         assert!(raw_stop_times.len() > 0);
         let start_time = str_time_to_seconds(&raw_stop_times[0].arrival_time);
 
@@ -88,7 +87,7 @@ impl RawParser {
             .into_iter()
             .map(|st: RawStopTime|
                 StopTime {
-                    stop_id: *self.stop_name_to_inx.get(&st.stop_id).unwrap() as u64,
+                    stop_id: self.stop_name_to_inx[&st.stop_id] as u64,
                     time: str_time_to_seconds(&st.arrival_time) - start_time,
                 })
             .collect::<Vec<StopTime>>();
@@ -117,13 +116,14 @@ impl RawParser {
 
         let mut curr_shape_id = -1;
 
-        let grouped_shapes: Vec<(String, _)> = raw_shapes
-            .into_iter()
-            .group_by(|l| l.shape_id)
-            .into_iter()
-            .collect::<Vec<(String, _)>>();
+        let grouped_shapes = raw_shapes
+            .iter()
+            .group_by(|l| l.shape_id.to_string());
+
 
         let shapes_in_constuction = grouped_shapes
+            .into_iter()
+            .collect::<Vec<(String, _)>>()
             .into_iter()
             .map(|(shape_id, vals)| ShapeInConstruction {
                 id: shape_id.to_string(),
@@ -135,14 +135,13 @@ impl RawParser {
         // build the shapes in parallel
         let with_points = shapes_in_constuction
             .into_iter()
-            .par_iter()
             .map(|sh| {
                 ShapeInConstruction {
                     id: sh.id,
                     raw_shapes: vec![],
                     points: sh.raw_shapes
                         .into_iter()
-                        .map(|v: RawShape| to_coordinates(v.shape_pt_lat, v.shape_pt_lon))
+                        .map(|v: &RawShape| to_coordinates(&v.shape_pt_lat, &v.shape_pt_lon))
                         .collect::<Vec<Coordinate<f64>>>(),
                 }
             })
@@ -185,8 +184,8 @@ impl RawParser {
     fn parse_trips(&mut self, path: &Path) {
         let trips_path = Path::new(&path).join(Path::new("trips.txt"));
         let raw_trips: Vec<RawTrip> = parse_gtfs(&trips_path).expect("Raw trips parsing");
-        for route in raw_routes {
-            self.add_route(route);
+        for trip in raw_trips {
+            self.add_trip(trip);
         }
     }
 

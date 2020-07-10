@@ -9,9 +9,8 @@ use std::thread;
 use geo::Coordinate;
 use itertools::{enumerate, Itertools};
 use log::{debug, error, info, trace, warn};
-use rayon::prelude::*;
 
-use crate::models::{Route, Shape, Stop, Trip, StopTime};
+use crate::models::{Route, Shape, Stop, Trip};
 
 #[derive(Debug, Default)]
 pub struct GtfsData {
@@ -35,12 +34,12 @@ pub struct GtfsData {
 }
 
 // contains a list of stops, and the time for each in seconds (the first has time 0)
-#[derive(Debug)]
+#[derive(Hash, Eq, PartialEq, Debug)]
 pub struct StopTimes {
-    pub(crate) stop_times : Vec<StopTime>
+    pub(crate) stop_times: Vec<StopTime>
 }
 
-#[derive(Debug)]
+#[derive(Hash, Eq, PartialEq, Debug)]
 pub struct StopTime {
     pub stop_id: u64,
     pub time: i64, // in seconds
@@ -64,22 +63,21 @@ impl InitialInx {
 }*/
 
 impl GtfsData {
-    pub fn merge_datasets( datasets: &mut Vec<GtfsData>) -> GtfsData {
-
-        GtfsData::zip_datasets_start_indexes(datasets)
+   pub fn merge_datasets(datasets: &mut Vec<GtfsData>) -> GtfsData {
+       /* GtfsData::zip_datasets_start_indexes(datasets)
             .par_iter_mut()
             .for_each(|(ds, start_inx)| ds.do_postprocessing(start_inx));
-
+*/
         let mut result: GtfsData = Default::default();
 
-        for ds in datasets.iter_mut() {
+      /*  for ds in datasets.iter_mut() {
             result.merge_dataset(ds);
         }
-
+*/
         result
     }
-
-    fn zip_datasets_start_indexes(datasets: &mut Vec<GtfsData>) -> Vec<(&mut GtfsData, InitialInx)>{
+/*
+    fn zip_datasets_start_indexes(datasets: &mut Vec<GtfsData>) -> Vec<(&mut GtfsData, InitialInx)> {
         let mut start_indexes = Vec::<InitialInx>::new();
         let mut att_inx = InitialInx {
             routes: 1,
@@ -94,13 +92,13 @@ impl GtfsData {
             .iter_mut()
             .zip(start_indexes.iter().copied())
             .collect::<Vec<(&mut GtfsData, InitialInx)>>()
-    }
+    }*/
     pub(crate) fn merge_dataset(&mut self, new_ds: &mut GtfsData) -> &GtfsData {
-        self.routes.append(new_ds.routes.as_mut());
-        self.trips.append(new_ds.trips.as_mut());
-        self.shapes.append(new_ds.shapes.as_mut());
-        self.stops.append(new_ds.stops.as_mut());
-        assert_eq!(new_ds.stops.len(), 0);
+        // self.routes.append(new_ds.routes.as_mut());
+        // self.trips.append(new_ds.trips.as_mut());
+        // self.shapes.append(new_ds.shapes.as_mut());
+        // self.stops.append(new_ds.stops.as_mut());
+        // assert_eq!(new_ds.stops.len(), 0);
         self
     }
 
@@ -108,14 +106,7 @@ impl GtfsData {
         &self.routes
     }
 
-    fn do_postprocessing(&mut self, initial_inx: &InitialInx) {
-        // self.normalize_stop_ids(initial_inx.stops);
-        // self.normalize_routes(initial_inx.routes);
-        // self.normalize_trips(initial_inx);
-        // self.assign_stops_to_routes();
-        // self.build_walk_paths();
-        // self.preprocess_stops_near_stops();
-    }
+
 
     // fn normalize_stop_ids(&mut self, initial_inx: usize) {
     //     &self.stops.sort_by(|a, b| a.stop_id.cmp(&b.stop_id));
