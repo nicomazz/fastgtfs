@@ -20,7 +20,6 @@ pub struct RawAgency {
     pub agency_fare_url: String,
 }
 
-
 #[derive(Debug, Deserialize, Default)]
 pub struct RawCalendar {
     pub service_id: String,
@@ -107,15 +106,9 @@ pub struct RawTrip {
 }
 
 pub fn parse_gtfs<T: for<'de> serde::Deserialize<'de>>(path: &Path) -> Result<Vec<T>, Error> {
-    let mut file = File::open(&path)?;
+    let file = File::open(&path).expect("File not found during parsing!");
     Ok(csv::Reader::from_reader(file)
         .deserialize()
         .filter_map(Result::ok)
         .collect::<Vec<T>>())
 }
-
-/*pub fn parse_gtfs_iter<T: for<'de> serde::Deserialize<'de>>(path: &Path) -> DeserializeRecordsIter<File, T> {
-    let mut file = File::open(&path).unwrap();
-    csv::Reader::from_reader(file).deserialize()
-}
-*/
