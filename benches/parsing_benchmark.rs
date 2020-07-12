@@ -14,7 +14,7 @@ fn parsing_benchmark(c: &mut Criterion) {
     generate_serialized_data();
     c.bench_function("read serialized data", |b| {
         b.iter(|| {
-            let gtfs = RawParser::read_preprocessed_data();
+            let gtfs = RawParser::read_preprocessed_data_from_default();
             println!("Parsed with {} trips", gtfs.trips.len());
         })
     });

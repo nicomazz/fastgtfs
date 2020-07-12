@@ -1,6 +1,7 @@
+use std::time::Instant;
+
 use crate::gtfs_data::GtfsData;
 use crate::raw_parser::RawParser;
-use std::time::Instant;
 
 pub fn get_test_paths() -> Vec<String> {
     ["actv_aut", "actv_nav", "alilaguna"]
@@ -27,7 +28,7 @@ pub fn generate_serialized_data() {
     let test_paths = get_test_paths();
     let mut parser = RawParser::new(test_paths);
     let now = Instant::now();
-    parser.generate_serialized_data();
+    parser.generate_serialized_data_into_default();
     println!(
         "Generating serialized data in: {}",
         now.elapsed().as_millis()

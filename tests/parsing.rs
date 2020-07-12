@@ -58,19 +58,8 @@ fn dataset_parsing() {
 }
 
 #[test]
-fn test_serialization() {
-    generate_serialized_data();
-}
-
-#[test]
-fn read_serialized_data() {
-    let ds = RawParser::read_preprocessed_data();
-    assert_dataset_filled(&ds);
-}
-
-#[test]
 fn serialize_and_deserialize() {
     generate_serialized_data();
-    RawParser::read_preprocessed_data();
+    RawParser::read_preprocessed_data_from_default();
     //    assert_eq!(original, deserialized);
 }

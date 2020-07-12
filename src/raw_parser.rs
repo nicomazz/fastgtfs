@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::fs;
 use std::fs::File;
 use std::path::Path;
 use std::time::Instant;
@@ -50,7 +51,7 @@ struct StopTimesInConstruction {
     stop_times: Vec<RawStopTime>,
 }
 
-const SERIALIZED_DATA: &str = "gtfs_data_output.flex";
+const DEFAULT_OUT_PATH: &str = "gtfs_serialized";
 
 mod gtfs_serializer {
     use std::fs::File;
@@ -63,24 +64,26 @@ mod gtfs_serializer {
     use crate::gtfs_data::GtfsData;
 
     fn serialize_vector<T: 'static + serde::Serialize + Sync + Send>(
-        out_file: &'static str,
+        out_path: String,
+        name: &'static str,
         v: Vec<T>,
     ) -> JoinHandle<()> {
         thread::spawn(move || {
             let mut buffer = flexbuffers::FlexbufferSerializer::new();
             v.serialize(&mut buffer).unwrap();
-            let mut output_file = File::create("gtfs_serialized/".to_owned() + out_file).unwrap();
+            let mut output_file = File::create(format!("{}/{}", out_path, name)).unwrap();
             output_file.write_all(buffer.view()).unwrap();
         })
     }
 
-    pub fn generate_serialized_data(ds: GtfsData) {
+    pub fn generate_serialized_data(ds: GtfsData, folder: String) {
+        let f = folder;
         vec![
-            serialize_vector("routes", ds.routes),
-            serialize_vector("trips", ds.trips),
-            serialize_vector("shapes", ds.shapes),
-            serialize_vector("stops", ds.stops),
-            serialize_vector("stop_times", ds.stop_times),
+            serialize_vector(f.clone(), "routes", ds.routes),
+            serialize_vector(f.clone(), "trips", ds.trips),
+            serialize_vector(f.clone(), "shapes", ds.shapes),
+            serialize_vector(f.clone(), "stops", ds.stops),
+            serialize_vector(f.clone(), "stop_times", ds.stop_times),
         ]
         .into_iter()
         .for_each(|v| {
@@ -103,11 +106,11 @@ mod gtfs_deserializer {
     use crate::gtfs_data::GtfsData;
 
     fn deserialize_vector<T: 'static + DeserializeOwned + Sync + Send>(
-        in_file: &'static str,
+        in_file: String,
     ) -> JoinHandle<Vec<T>> {
         thread::spawn(move || {
             let now = Instant::now();
-            let content = read_file(Path::new(&format!("gtfs_serialized/{}", in_file)));
+            let content = read_file(Path::new(&in_file));
             let r = flexbuffers::Reader::get_root(&content).unwrap();
             let res = Vec::<T>::deserialize(r).unwrap();
             println!(
@@ -119,12 +122,12 @@ mod gtfs_deserializer {
         })
     }
 
-    pub fn read_serialized_data() -> GtfsData {
-        let routes_t = deserialize_vector("routes");
-        let trips_t = deserialize_vector("trips");
-        let shapes_t = deserialize_vector("shapes");
-        let stops_t = deserialize_vector("stops");
-        let stop_times_t = deserialize_vector("stop_times");
+    pub fn read_serialized_data(folder: String) -> GtfsData {
+        let routes_t = deserialize_vector(folder.clone() + "/routes");
+        let trips_t = deserialize_vector(folder.clone() + "/trips");
+        let shapes_t = deserialize_vector(folder.clone() + "/shapes");
+        let stops_t = deserialize_vector(folder.clone() + "/stops");
+        let stop_times_t = deserialize_vector(folder.clone() + "/stop_times");
 
         GtfsData {
             dataset_id: 0,
@@ -150,24 +153,38 @@ impl RawParser {
             ..Default::default()
         }
     }
-    pub fn read_preprocessed_data() -> GtfsData {
-        let now = Instant::now();
 
-        let res = gtfs_deserializer::read_serialized_data();
+    pub fn read_preprocessed_data_from_default() -> GtfsData {
+        RawParser::read_preprocessed_data(DEFAULT_OUT_PATH.to_string())
+    }
+
+    pub fn read_preprocessed_data(folder: String) -> GtfsData {
+        let now = Instant::now();
+        let res = gtfs_deserializer::read_serialized_data(folder);
         println!("Reading serialized data in: {}", now.elapsed().as_millis());
         res
     }
 
-    pub fn generate_serialized_data(&mut self) {
+    pub fn generate_serialized_data_into_default(&mut self) {
+        self.generate_serialized_data(DEFAULT_OUT_PATH)
+    }
+
+    pub fn generate_serialized_data(&mut self, out_folder: &str) {
+        if !Path::new(out_folder).exists() {
+            println!("Creating output path!");
+            fs::create_dir_all(out_folder).expect("Can't create output folder!");
+        }
         self.parse();
         let ds = std::mem::take(&mut self.dataset);
-        gtfs_serializer::generate_serialized_data(ds);
+        gtfs_serializer::generate_serialized_data(ds, out_folder.to_string());
     }
 
     pub fn parse(&mut self) {
-        for path in self.paths.clone() {
-            self.parse_path(Path::new(&path));
-        }
+        self.paths
+            .clone()
+            .iter()
+            .map(|p| Path::new(p))
+            .for_each(|p| self.parse_path(p));
     }
 
     fn parse_path(&mut self, path: &Path) {
