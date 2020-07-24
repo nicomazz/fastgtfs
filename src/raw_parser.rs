@@ -1,3 +1,4 @@
+use std::borrow::BorrowMut;
 use std::collections::HashMap;
 use std::fs;
 use std::fs::File;
@@ -5,11 +6,12 @@ use std::path::Path;
 use std::time::Instant;
 
 use itertools::Itertools;
-use rayon::iter::ParallelIterator;
+use log::debug;
 use rayon::iter::{IntoParallelIterator, IntoParallelRefIterator};
+use rayon::iter::ParallelIterator;
 
 use crate::gtfs_data::{
-    to_coordinates, GtfsData, LatLng, Route, Shape, Stop, StopTime, StopTimes, Trip,
+    GtfsData, LatLng, Route, Shape, Stop, StopTime, StopTimes, to_coordinates, Trip,
 };
 use crate::raw_models::{parse_gtfs, RawRoute, RawShape, RawStop, RawStopTime, RawTrip};
 
@@ -85,10 +87,10 @@ mod gtfs_serializer {
             serialize_vector(f.clone(), "stops", ds.stops),
             serialize_vector(f.clone(), "stop_times", ds.stop_times),
         ]
-        .into_iter()
-        .for_each(|v| {
-            v.join().unwrap();
-        });
+            .into_iter()
+            .for_each(|v| {
+                v.join().unwrap();
+            });
     }
 }
 
@@ -165,6 +167,27 @@ impl RawParser {
         res
     }
 
+    pub fn ensure_data_serialized_created(&mut self) {
+        println!("Ensuring data serialized");
+        let routes_file = format!("{}/routes", DEFAULT_OUT_PATH);
+        if !Path::new(&routes_file).exists() {
+            self.generate_serialized_data_into_default();
+            return;
+        }
+
+        let metadata = fs::metadata(routes_file).unwrap();
+        // every 5 minutes
+        let last_modified = metadata.modified().unwrap().elapsed().unwrap().as_secs();
+
+
+        println!("Last modified: {}", last_modified);
+        if last_modified > 60 * 5 {
+            println!("Generating serializable data!");
+            self.generate_serialized_data_into_default();
+        }
+    }
+
+
     pub fn generate_serialized_data_into_default(&mut self) {
         self.generate_serialized_data(DEFAULT_OUT_PATH)
     }
@@ -193,6 +216,34 @@ impl RawParser {
         self.parse_routes(path);
         self.parse_trips(path);
         self.parse_stop_times(path);
+        self.assign_routes_to_stops();
+    }
+
+    fn assign_routes_to_stops(&mut self) {
+        let mut ds = &mut self.dataset;
+        let routes = &ds.routes;
+        let mut routes_for_stop_id: HashMap<usize, Vec<usize>> = HashMap::new(); // stop_id -> Vec<route_id>
+
+        routes.iter().for_each(|r| {
+            r.trips
+                .iter()
+                .map(|trip_id| ds.get_trip(*trip_id).stop_times_id)
+                .unique()
+                .map(|stop_times_id| ds.get_stop_times(stop_times_id))
+                .for_each(|stop_times| {
+                    stop_times.stop_times.iter().for_each(|stop_time| {
+                        routes_for_stop_id.entry(stop_time.stop_id).or_default().push(r.route_id);
+                    })
+                });
+        });
+
+        for (stop_id, routes) in routes_for_stop_id {
+            debug!("stop id: {} number of routes: {}", stop_id, routes.len());
+            let stop = &mut self.dataset.stops[stop_id];
+            routes.iter().for_each(|r_id| {
+                stop.routes.insert(*r_id);
+            });
+        }
     }
 
     fn parse_stops(&mut self, path: &Path) {
@@ -205,13 +256,14 @@ impl RawParser {
         let number_of_stops = self.dataset.stops.len();
         self.stop_name_to_inx.insert(stop.stop_id, number_of_stops);
         self.dataset.stops.push(Stop {
-            stop_id: number_of_stops as i64,
+            stop_id: number_of_stops,
             stop_name: stop.stop_name,
             stop_pos: LatLng {
                 lat: stop.stop_lat.parse::<f64>().unwrap(),
                 lng: stop.stop_lon.parse::<f64>().unwrap(),
             },
             stop_timezone: "".to_string(),
+            routes: Default::default(),
         })
     }
 
@@ -240,7 +292,7 @@ impl RawParser {
                 let stop_time_id = self.add_stop_times(st.stop_times);
                 let trip_id = *self.trip_name_to_inx.get(&st.trip_id).unwrap();
                 let trip: &mut Trip = self.dataset.trips.get_mut(trip_id).unwrap();
-                trip.stop_times_id = stop_time_id as i64;
+                trip.stop_times_id = stop_time_id;
                 trip.start_time = st.start_time;
             });
     }
@@ -256,7 +308,7 @@ impl RawParser {
         let stop_times = raw_stop_times
             .par_iter()
             .map(|st| {
-                let stop_id = *self.stop_name_to_inx.get(&st.stop_id).unwrap() as u64;
+                let stop_id = *self.stop_name_to_inx.get(&st.stop_id).unwrap();
                 StopTime {
                     stop_id,
                     time: str_time_to_seconds(&st.arrival_time) - start_time,
@@ -271,13 +323,19 @@ impl RawParser {
         }
     }
 
-    fn add_stop_times(&mut self, stop_times: StopTimes) -> u64 {
-        let number_of_stop_times = self.dataset.stop_times.len();
-        let new_id = **self
-            .stop_times_inserted
-            .get(&stop_times)
-            .get_or_insert(&number_of_stop_times) as u64;
-        if new_id == number_of_stop_times as u64 {
+    fn add_stop_times(&mut self, stop_times: StopTimes) -> usize {
+        let stop_times_inserted = &mut self.stop_times_inserted;
+        let selfstop_times = &self.dataset.stop_times;
+        let number_of_stop_times = selfstop_times.len();
+        if !stop_times_inserted.contains_key(&stop_times) {
+            stop_times_inserted.insert(stop_times.clone(), number_of_stop_times);
+        }
+        let new_id = *stop_times_inserted.get(&stop_times).unwrap();
+
+        /*        let new_id = **stop_times_inserted
+        .get(&stop_times)
+        .get_or_insert(&number_of_stop_times);*/
+        if new_id == number_of_stop_times {
             self.dataset.stop_times.push(stop_times);
         }
         new_id
@@ -319,10 +377,11 @@ impl RawParser {
         let number_of_shapes = self.dataset.shapes.len();
         self.shape_name_to_inx.insert(shape.id, number_of_shapes);
         self.dataset.shapes.push(Shape {
-            shape_id: number_of_shapes as u64,
+            shape_id: number_of_shapes,
             points: shape.points,
         })
     }
+
     fn parse_routes(&mut self, path: &Path) {
         let routes_path = Path::new(&path).join(Path::new("routes.txt"));
         let raw_routes: Vec<RawRoute> = parse_gtfs(&routes_path).expect("Raw routes parsing");
@@ -330,19 +389,20 @@ impl RawParser {
             self.add_route(route);
         }
     }
+
     fn add_route(&mut self, route: RawRoute) {
         let number_of_routes = self.dataset.routes.len();
         self.routes_name_to_inx
             .insert(route.route_id, number_of_routes);
         self.dataset.routes.push(Route {
-            route_id: number_of_routes as i64,
+            route_id: number_of_routes,
             route_short_name: route.route_short_name,
             route_long_name: route.route_long_name,
             trips: vec![],
-            stops: vec![],
             dataset_index: 0,
         })
     }
+
     fn parse_trips(&mut self, path: &Path) {
         let trips_path = Path::new(&path).join(Path::new("trips.txt"));
         let raw_trips: Vec<RawTrip> = parse_gtfs(&trips_path).expect("Raw trips parsing");
@@ -354,9 +414,9 @@ impl RawParser {
     fn add_trip(&mut self, trip: RawTrip) {
         let number_of_trips = self.dataset.trips.len();
         self.trip_name_to_inx.insert(trip.trip_id, number_of_trips);
-        let trip_id = number_of_trips as i64;
-        let route_id = *self.routes_name_to_inx.get(&trip.route_id).unwrap() as i64;
-        let shape_id = *self.shape_name_to_inx.get(&trip.shape_id).unwrap() as i64;
+        let trip_id = number_of_trips;
+        let route_id = *self.routes_name_to_inx.get(&trip.route_id).unwrap();
+        let shape_id = *self.shape_name_to_inx.get(&trip.shape_id).unwrap();
 
         self.dataset.trips.push(Trip {
             route_id,

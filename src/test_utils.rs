@@ -34,3 +34,10 @@ pub fn generate_serialized_data() {
         now.elapsed().as_millis()
     );
 }
+
+pub fn make_dataset() -> GtfsData {
+    let test_paths = get_test_paths();
+    let mut parser = RawParser::new(test_paths);
+    parser.parse();
+    parser.dataset
+}

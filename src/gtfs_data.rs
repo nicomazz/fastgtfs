@@ -2,7 +2,7 @@ extern crate flexbuffers;
 extern crate serde;
 
 use std::cmp::Ordering;
-use std::collections::HashMap;
+use std::collections::{BTreeSet, HashMap, HashSet};
 use std::fmt::format;
 use std::fs::File;
 use std::io::{Error, Read, Seek, SeekFrom};
@@ -11,7 +11,9 @@ use std::rc::Rc;
 use std::sync::{Arc, RwLock};
 use std::thread;
 
-use geo::Coordinate;
+use chrono::{Datelike, DateTime, Timelike, TimeZone, Utc};
+use geo::{Coordinate, Point};
+use geo::algorithm::geodesic_distance::GeodesicDistance;
 use itertools::{enumerate, Itertools};
 use log::{debug, error, info, trace, warn};
 use serde::{Deserialize, Serialize};
@@ -30,22 +32,91 @@ pub struct GtfsData {
     //pub agencies: Vec<Agency>,
 }
 
-// contains a list of stops, and the time for each in seconds (the first has time 0)
-#[derive(Hash, Eq, PartialEq, Debug, Serialize, Deserialize)]
-pub struct StopTimes {
-    pub(crate) stop_times: Vec<StopTime>,
-}
-
-#[derive(Hash, Eq, PartialEq, Debug, Serialize, Deserialize)]
-pub struct StopTime {
-    pub stop_id: u64,
-    pub time: i64, // in seconds
-}
-
 impl GtfsData {
+    pub fn get_stop(&self, id: usize) -> &Stop {
+        &self.stops[id]
+    }
+
     pub fn get_trip(&self, id: usize) -> &Trip {
         &self.trips[id]
     }
+
+    pub fn get_route(&self, id: usize) -> &Route {
+        &self.routes[id]
+    }
+
+    pub fn get_stop_times(&self, id: usize) -> &StopTimes {
+        &self.stop_times[id]
+    }
+
+
+    pub fn get_route_stop_times(&self, route_id: usize) -> &StopTimes {
+        let route = self.get_route(route_id);
+        let trip = self.get_trip(route.trips[0]);
+        self.get_stop_times(trip.stop_times_id)
+    }
+    /// returns the first trip that has `stop` (with inx after `start_stop_inx`) after time (not in excluded_trips)
+    pub fn trip_after_time(&self, route_id: usize, stop_id: usize, min_time: i64, start_stop_inx: usize, excluded_trips: HashSet<usize>) -> Option<(&Trip, usize)> {
+        let route = self.get_route(route_id);
+        let trips = &route.trips;
+        let stop_times = &self.get_route_stop_times(route_id).stop_times;
+        let trips_duration = stop_times.last().unwrap().time;
+
+        /// indexes of the stops in `stop_times` matching `stop_id`
+        let inxes_for_stop = stop_times
+            .iter()
+            .skip(start_stop_inx)
+            .enumerate()
+            .filter(|(inx, stop_time)| stop_time.stop_id == stop_id)
+            .map(|(inx, _)| inx)
+            .collect::<Vec<usize>>();
+
+        trips.iter()
+            .map(|t_id| self.get_trip(*t_id))
+            .filter(|trip| trip.start_time + trips_duration >= min_time)
+            .find_map(|trip| {
+                inxes_for_stop
+                    .iter()
+                    .filter(|&&inx| stop_times[inx].time + trip.start_time >= min_time)
+                    .map(|inx| (trip, *inx))
+                    .next()
+            })
+    }
+
+    pub fn trip_active_in_day(&self, trip_id: usize, time: GtfsTime) -> bool {
+        //todo
+        true
+    }
+
+    // todo: overoptimize
+    pub fn find_nearest_stop(&self, pos: LatLng) -> &Stop {
+        let coord = pos.as_point();
+        let item = self.stops.iter().min_by_key(|s| {
+            s.stop_pos.as_point().geodesic_distance(&coord) as i64
+        });
+        item.unwrap()
+    }
+
+    pub fn get_stops_in_range(&self, pos: LatLng, meters: f64) -> Vec<usize> {
+        let coord = pos.as_point();
+        self.stops
+            .iter()
+            .filter(|&stop| stop.stop_pos.as_point().geodesic_distance(&coord) < meters)
+            .map(|s| s.stop_id)
+            .collect::<Vec<usize>>()
+    }
+}
+
+// contains a list of stops, and the time for each in seconds (the first has time 0)
+#[derive(Hash, Eq, PartialEq, Debug, Serialize, Deserialize, Clone)]
+pub struct StopTimes {
+    pub stop_times: Vec<StopTime>,
+}
+
+#[derive(Hash, Eq, PartialEq, Debug, Serialize, Deserialize, Clone)]
+pub struct StopTime {
+    pub stop_id: usize,
+    pub time: i64, // in seconds
 }
 
 impl Ord for GtfsData {
@@ -70,21 +141,34 @@ impl Eq for GtfsData {}
 
 #[derive(Debug, Default, Serialize, Deserialize)]
 pub struct Route {
-    pub route_id: i64,
+    pub route_id: usize,
     pub(crate) route_short_name: String,
     pub(crate) route_long_name: String,
 
-    pub trips: Vec<i64>,
-    pub stops: Vec<i64>,
+    pub trips: Vec<usize>,
+    //pub stops: Vec<usize>, we get the stops from a trip stop_times
     pub dataset_index: u64,
+}
+
+impl Route {
+    // TODO: it shound be considered that a route might have several different trips
+    pub fn get_stop_inx(&self, ds: &GtfsData, stop_id: usize) -> usize {
+        assert_ne!(self.trips.len(), 0);
+        let stop_times = ds.get_route_stop_times(self.route_id);
+        stop_times.stop_times
+            .iter()
+            .map(|stop_time| stop_time.stop_id)
+            .position(|s| s == stop_id)
+            .expect(&format!("{} doesn't have {}", self.route_long_name, stop_id))
+    }
 }
 
 #[derive(Debug, Default, Serialize, Deserialize)]
 pub struct Trip {
-    pub route_id: i64,
-    pub trip_id: i64,
-    pub shape_id: i64,
-    pub stop_times_id: i64,
+    pub route_id: usize,
+    pub trip_id: usize,
+    pub shape_id: usize,
+    pub stop_times_id: usize,
     // todo: this points to a vec<StopTime>
     pub start_time: i64, // in seconds since midnight. To get all stop times use stop_times_id and add the start time to each.
 
@@ -97,17 +181,45 @@ pub struct Trip {
 }
 
 #[derive(Debug, Default, Serialize, Deserialize)]
+pub struct GtfsTime {
+    pub timestamp: i64,
+}
+
+impl GtfsTime {
+    fn date_time(&self) -> DateTime<Utc> {
+        Utc.timestamp(self.timestamp, 0)
+    }
+    pub fn day_of_week(&self) -> u32 {
+        self.date_time().weekday().num_days_from_monday()
+    }
+    pub fn h(&self) -> u32 {
+        self.date_time().hour()
+    }
+    pub fn m(&self) -> u32 {
+        self.date_time().minute()
+    }
+    pub fn s(&self) -> u32 {
+        self.date_time().second()
+    }
+    pub fn since_midnight(&self) -> u32 {
+        self.date_time().num_seconds_from_midnight()
+    }
+}
+
+#[derive(Debug, Default, Serialize, Deserialize)]
 pub struct Shape {
-    pub(crate) shape_id: u64,
+    pub(crate) shape_id: usize,
     pub(crate) points: Vec<LatLng>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone, Default)]
 pub struct Stop {
-    pub stop_id: i64,
-    pub(crate) stop_name: String,
+    pub stop_id: usize,
+    pub stop_name: String,
     pub(crate) stop_pos: LatLng,
     pub(crate) stop_timezone: String,
+
+    pub routes: BTreeSet<usize>,
 }
 
 pub fn to_coordinates(lat: &str, lng: &str) -> LatLng {
@@ -118,17 +230,17 @@ pub fn to_coordinates(lat: &str, lng: &str) -> LatLng {
     }
 }
 
-#[derive(Debug, Default, Serialize, Deserialize)]
+#[derive(Debug, Default, Serialize, Deserialize, Clone)]
 pub struct LatLng {
     pub lat: f64,
     pub lng: f64,
 }
 
 impl LatLng {
-    fn as_coordinates(&self) -> Coordinate<f64> {
+    fn as_point(&self) -> Point<f64> {
         Coordinate {
             x: self.lat,
             y: self.lng,
-        }
+        }.into()
     }
 }

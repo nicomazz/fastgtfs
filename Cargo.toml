@@ -8,13 +8,14 @@ edition = "2018"
 
 [dependencies]
 lazy_static = "1.4.0"
-geo = "0.13.0"
+geo = "0.14.1"
 itertools = "0.9.0"
 rayon = "1.1"
 log = "0.4"
 csv = "1.1"
 serde = { version = "1.0.114", features = ["derive"] }
 flexbuffers = "0.1.1"
+chrono = { version = "0.4", features = ["serde"] }
 
 [dev-dependencies]
 criterion = "0.3"
