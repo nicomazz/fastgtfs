@@ -9,35 +9,56 @@ use rayon::iter::IntoParallelIterator;
 use rayon::iter::ParallelIterator;
 use rayon::prelude::IntoParallelRefIterator;
 
-use crate::gtfs_data::{GtfsData, LatLng, Route, Stop, Trip};
+use crate::gtfs_data::{GtfsData, GtfsTime, LatLng, Route, Stop, Trip};
 
 #[derive(Debug)]
 pub struct RaptorNavigator<'a> {
     start_stop: Stop,
     end_stop: Stop,
 
+    // v[stop_id] -> is within 50 m to destination?
     stops_near_destination_map: HashMap<usize, bool>,
     stops_near_destination_list: Vec<usize>,
-    // v[stop_id] -> is within 50 m to destination?
-    max_hop_allowed: u8,
-    start_time: u64,
+
+    // routes that have trips active today. This speeds up things by skipping rotues.
     routes_active_this_day: HashSet<usize>,
 
-    // [stop_id][changes] -> distance in seconds
+    navigation_params: NavigationParams,
+
+    /// best arrival time at each `stop_id` with `changes`.
+    /// [stop_id][changes] -> distance from source in seconds
     t: HashMap<(usize, u8), i64>,
 
-    // [stop_id][hops] -> time
+    /// best absolute time for each `stop`
+    /// [stop_id] -> time
     tbest: HashMap<usize, i64>,
-    // [stop_id][changes] -> trip that arrives there
+
+    /// How do I arrive at `stop_id` with `changes` changes?
+    /// This is used to reconstruct the solution
+    /// [stop_id][changes] -> trip that arrives there
     p: HashMap<(usize, u8), BacktrackingInfo>,
 
-    marked_stops: Vec<usize>, // stops reached so far
+    /// Stops to consider in the next iteration
+    marked_stops: Vec<usize>,
 
+    /// Optimizations if we only need the best solution, and not many of them
     only_best: bool,
     best_destination_time: i64,
 
     dataset: &'a GtfsData,
 
+}
+
+/// This is used to walk between stops when we change bus
+const NEAR_STOP_NUMBER: usize = 40;
+
+#[derive(Debug, Clone, Default)]
+pub struct NavigationParams {
+    pub from: LatLng,
+    pub to: LatLng,
+    pub max_changes: u8,
+    pub start_time: GtfsTime,
+    //pub sol_callback: Box<dyn Fn(Solution)>,
 }
 
 #[derive(Debug, Default)]
@@ -49,7 +70,9 @@ struct BacktrackingInfo {
     end_index: usize,
 }
 
-struct Solution {}
+struct Solution {
+    time: u64,
+}
 
 struct RouteStop {
     route: usize,
@@ -65,9 +88,8 @@ impl<'a> RaptorNavigator<'a> {
             end_stop: Default::default(),
             stops_near_destination_list: Default::default(),
             stops_near_destination_map: Default::default(),
-            max_hop_allowed: 0,
-            start_time: 0,
             routes_active_this_day: Default::default(),
+            navigation_params: Default::default(),
             t: Default::default(),
             tbest: Default::default(),
             p: Default::default(),
@@ -76,32 +98,33 @@ impl<'a> RaptorNavigator<'a> {
             best_destination_time: 0,
         }
     }
-    pub fn find_path_from_coordinates(&mut self, from: LatLng, to: LatLng, max_changes: u8, time: u64) {
-        let from_stop = self.dataset.find_nearest_stop(from);
-        let to_stop = self.dataset.find_nearest_stop(to);
-        self.find_path(from_stop, to_stop, max_changes, time);
-    }
-    pub fn find_path(&mut self, from: &Stop, to: &Stop, max_changes: u8, time: u64) {
-        self.start_stop = from.clone();
-        self.end_stop = to.clone();
-        self.max_hop_allowed = max_changes;
-        self.start_time = time;
-        self.compute_routes_active_today(time);
-        self.marked_stops.push(from.stop_id);
-        self.find_near_destination_stops(to.stop_pos.clone());
-        println!("Navigation from {} to {} started", from.stop_name, to.stop_name);
 
-        let now = Instant::now();
+    pub fn find_path(&mut self, params: NavigationParams) {
+        self.init_navigation(params);
+
+        println!("Navigation from {} to {} started", self.start_stop.stop_name, self.end_stop.stop_name);
         self.navigate();
-        println!("Navigation finished in: {} ms", now.elapsed().as_millis());
     }
+
+    fn init_navigation(&mut self, params: NavigationParams) {
+        self.navigation_params = params.clone();
+
+        self.start_stop = self.dataset.find_nearest_stop(params.from).clone();
+        self.end_stop = self.dataset.find_nearest_stop(params.to).clone();
+        self.marked_stops.push(self.start_stop.stop_id);
+        self.compute_routes_active_today(&params.start_time);
+        self.find_near_destination_stops(self.end_stop.stop_pos.clone());
+    }
+
     pub fn find_near_destination_stops(&mut self, pos: LatLng) {
         self.stops_near_destination_list = self.dataset.get_stops_in_range(pos, 50.0);
         self.stops_near_destination_map = self.stops_near_destination_list.iter().map(|&stop| (stop, true)).collect();
     }
+
     /// Does |max_hop_allowed| passes
     fn navigate(&mut self) {
-        for hop in 1..self.max_hop_allowed {
+        let now = Instant::now();
+        for hop in 1..self.navigation_params.max_changes {
             println!("---- hop {}", hop);
             // Let's get all the routespassing trougth the stops marked
             let route_stops_to_consider = self.build_route_stop();
@@ -112,6 +135,7 @@ impl<'a> RaptorNavigator<'a> {
 
             self.add_walking_path();
         }
+        println!("Navigation finished in: {} ms", now.elapsed().as_millis());
     }
 
     /// For each marked stop, tries to reach the new possible ones
@@ -221,11 +245,21 @@ impl<'a> RaptorNavigator<'a> {
 
         // todo
     }
-    fn add_walking_path(&self) {
-        println!("add_walking_path to implement!")
+    /// Let's add the near stop to each one marked
+    fn add_walking_path(&mut self) {
+        // TODO do time this, it might be very, very expensive!
+        let mut near_stops = self.marked_stops.iter()
+            .map(|&s| self.dataset.get_stop(s))
+            .flat_map(|s| {
+                self.dataset.get_near_stops(&s.stop_pos, NEAR_STOP_NUMBER)
+            })
+            .collect::<BTreeSet<usize>>();
+        near_stops.extend(&self.marked_stops);
+
+        self.marked_stops =  near_stops.into_iter().collect();
     }
     fn check_for_solution(&mut self, hop_att: u8) {
-        let mut  dest_to_clear = vec![];
+        let mut dest_to_clear = vec![];
         for near_stop_dest in self.stops_near_destination_list.clone() {
             let entry = (near_stop_dest, hop_att);
             if self.p.contains_key(&entry) {
@@ -233,17 +267,17 @@ impl<'a> RaptorNavigator<'a> {
                 self.reconstruct_solution(near_stop_dest, hop_att);
                 dest_to_clear.push(entry);
             }
-
         }
         for entry in dest_to_clear {
             self.p.remove_entry(&entry);
         }
     }
 
-    fn reconstruct_solution(&mut self, stop_id : usize, hop_att: u8){
+    fn reconstruct_solution(&mut self, stop_id: usize, hop_att: u8) {
         println!("--> TODO: reconstruct solution!");
     }
-    fn compute_routes_active_today(&mut self, _time: u64) {
+
+    fn compute_routes_active_today(&mut self, _time: &GtfsTime) {
         self.routes_active_this_day.clear();
         // todo: compute routes active today
         for r in &self.dataset.routes {

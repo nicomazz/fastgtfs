@@ -10,7 +10,14 @@ use std::path::Path;
 use std::rc::Rc;
 use std::sync::{Arc, RwLock};
 use std::thread;
+use std::thread::sleep;
+use std::time::Duration;
+use std::time::SystemTime;
 
+use cached::{
+    proc_macro::cached,
+    SizedCache,
+};
 use chrono::{Datelike, DateTime, Timelike, TimeZone, Utc};
 use geo::{Coordinate, Point};
 use geo::algorithm::geodesic_distance::GeodesicDistance;
@@ -105,6 +112,26 @@ impl GtfsData {
             .map(|s| s.stop_id)
             .collect::<Vec<usize>>()
     }
+    
+    pub fn get_near_stops(&self, pos: &LatLng, number: usize) -> Vec<usize> {
+        near_stops(pos, number, &self.stops)
+    }
+}
+
+#[cached(
+type = "SizedCache<(u64,u64, usize), Vec<usize>>",
+create = "{ SizedCache::with_size(5000) }",
+convert = r#"{ ((pos.lat * 1000.0) as u64 , (pos.lng * 1000.0) as u64,number) }"#
+)]
+fn near_stops(pos: &LatLng, number: usize, stops: &Vec<Stop>) -> Vec<usize> {
+    let coord = pos.as_point();
+    stops
+        .iter()
+        .sorted_by_key(|stop|
+            (stop.stop_pos.as_point().geodesic_distance(&coord) * 1000.0) as i64)
+        .take(number)
+        .map(|stop| stop.stop_id)
+        .collect::<Vec<usize>>()
 }
 
 // contains a list of stops, and the time for each in seconds (the first has time 0)
@@ -180,12 +207,29 @@ pub struct Trip {
     pub(crate) wheelchair_accessible: String,
 }
 
-#[derive(Debug, Default, Serialize, Deserialize)]
+#[derive(Debug, Default, Serialize, Deserialize, Clone)]
 pub struct GtfsTime {
-    pub timestamp: i64,
+    timestamp: i64,
 }
 
 impl GtfsTime {
+    pub fn new_from_midnight(time: i64) -> GtfsTime {
+        let ts = SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap().as_secs() as i64;
+        let sec_since_midnight = Utc.timestamp(ts as i64, 0).num_seconds_from_midnight() as i64;
+        let last_midnight = ts - sec_since_midnight;
+
+        GtfsTime {
+            timestamp: last_midnight + time
+        }
+    }
+
+    pub fn new_from_timestamp(timestamp: i64) -> GtfsTime {
+        GtfsTime {
+            timestamp
+        }
+    }
+
+
     fn date_time(&self) -> DateTime<Utc> {
         Utc.timestamp(self.timestamp, 0)
     }
