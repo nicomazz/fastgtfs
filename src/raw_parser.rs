@@ -181,7 +181,7 @@ impl RawParser {
 
 
         println!("Last modified: {}", last_modified);
-        if last_modified > 60 * 5 {
+        if last_modified > 60 * 60 { // rebuild the data every hour
             println!("Generating serializable data!");
             self.generate_serialized_data_into_default();
         }

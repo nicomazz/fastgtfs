@@ -24,6 +24,7 @@ use geo::algorithm::geodesic_distance::GeodesicDistance;
 use itertools::{enumerate, Itertools};
 use log::{debug, error, info, trace, warn};
 use serde::{Deserialize, Serialize};
+use geo::algorithm::euclidean_distance::EuclideanDistance;
 
 #[derive(Debug, Default, Serialize, Deserialize)]
 pub struct GtfsData {
@@ -63,7 +64,7 @@ impl GtfsData {
         self.get_stop_times(trip.stop_times_id)
     }
     /// returns the first trip that has `stop` (with inx after `start_stop_inx`) after time (not in excluded_trips)
-    pub fn trip_after_time(&self, route_id: usize, stop_id: usize, min_time: i64, start_stop_inx: usize, excluded_trips: HashSet<usize>) -> Option<(&Trip, usize)> {
+    pub fn trip_after_time(&self, route_id: usize, stop_id: usize, min_time: &GtfsTime, start_stop_inx: usize, excluded_trips: HashSet<usize>) -> Option<(&Trip, usize)> {
         let route = self.get_route(route_id);
         let trips = &route.trips;
         let stop_times = &self.get_route_stop_times(route_id).stop_times;
@@ -80,11 +81,11 @@ impl GtfsData {
 
         trips.iter()
             .map(|t_id| self.get_trip(*t_id))
-            .filter(|trip| trip.start_time + trips_duration >= min_time)
+            .filter(|trip| trip.start_time + trips_duration >= min_time.since_midnight() as i64)
             .find_map(|trip| {
                 inxes_for_stop
                     .iter()
-                    .filter(|&&inx| stop_times[inx].time + trip.start_time >= min_time)
+                    .filter(|&&inx| stop_times[inx].time + trip.start_time >= min_time.since_midnight() as i64)
                     .map(|inx| (trip, *inx))
                     .next()
             })
@@ -112,7 +113,7 @@ impl GtfsData {
             .map(|s| s.stop_id)
             .collect::<Vec<usize>>()
     }
-    
+
     pub fn get_near_stops(&self, pos: &LatLng, number: usize) -> Vec<usize> {
         near_stops(pos, number, &self.stops)
     }
@@ -128,7 +129,7 @@ fn near_stops(pos: &LatLng, number: usize, stops: &Vec<Stop>) -> Vec<usize> {
     stops
         .iter()
         .sorted_by_key(|stop|
-            (stop.stop_pos.as_point().geodesic_distance(&coord) * 1000.0) as i64)
+            (stop.stop_pos.as_point().euclidean_distance(&coord) * 1000.0) as i64)
         .take(number)
         .map(|stop| stop.stop_id)
         .collect::<Vec<usize>>()
@@ -207,7 +208,7 @@ pub struct Trip {
     pub(crate) wheelchair_accessible: String,
 }
 
-#[derive(Debug, Default, Serialize, Deserialize, Clone)]
+#[derive(Debug, Default, Serialize, Deserialize, Clone, Eq, Ord, PartialEq, PartialOrd)]
 pub struct GtfsTime {
     timestamp: i64,
 }
@@ -229,7 +230,18 @@ impl GtfsTime {
         }
     }
 
+    pub fn new_infinite() -> GtfsTime {
+        GtfsTime::new_from_timestamp(u32::MAX as i64)
+    }
 
+    pub fn set_day_from(&mut self, other: &GtfsTime) {
+        let since_midnight = self.since_midnight();
+        self.timestamp = (other.timestamp as u32 - other.since_midnight() + since_midnight) as i64;
+    }
+
+    pub fn add_seconds(&mut self, sec: u64) {
+        self.timestamp += sec as i64;
+    }
     fn date_time(&self) -> DateTime<Utc> {
         Utc.timestamp(self.timestamp, 0)
     }
@@ -281,7 +293,7 @@ pub struct LatLng {
 }
 
 impl LatLng {
-    fn as_point(&self) -> Point<f64> {
+    pub(crate) fn as_point(&self) -> Point<f64> {
         Coordinate {
             x: self.lat,
             y: self.lng,
