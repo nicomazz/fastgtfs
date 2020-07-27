@@ -12,6 +12,7 @@ use rayon::iter::ParallelIterator;
 use rayon::prelude::IntoParallelRefIterator;
 
 use crate::gtfs_data::{GtfsData, GtfsTime, LatLng, Route, Stop, Trip};
+use std::sync::mpsc::Sender;
 
 #[derive(Debug)]
 pub struct RaptorNavigator<'a> {
@@ -49,6 +50,8 @@ pub struct RaptorNavigator<'a> {
 
     dataset: &'a GtfsData,
 
+    on_solution_found: Sender<Solution>,
+
 }
 
 /// This is used to walk between stops when we change bus
@@ -80,7 +83,7 @@ impl BacktrackingInfo {
 }
 
 #[derive(Debug, Default)]
-struct Solution {
+pub struct Solution {
     start_time: GtfsTime,
     duration_seconds: usize,
     components: Vec<SolutionComponent>,
@@ -169,7 +172,7 @@ struct RouteStop {
 
 
 impl<'a> RaptorNavigator<'a> {
-    pub fn new(dataset: &GtfsData) -> RaptorNavigator {
+    pub fn new(dataset: &GtfsData, on_solution_found : Sender<Solution>) -> RaptorNavigator {
         RaptorNavigator {
             dataset,
             start_stop: Default::default(),
@@ -184,6 +187,7 @@ impl<'a> RaptorNavigator<'a> {
             marked_stops: vec![],
             only_best: false,
             best_destination_time: GtfsTime::new_infinite(),
+            on_solution_found,
         }
     }
 
@@ -447,8 +451,7 @@ impl<'a> RaptorNavigator<'a> {
         }
         solution.set_last_component_start(self.start_stop.stop_id);
         solution.complete();
-        println!("Solution found! {}", solution);
-        // TODO send solution with the callback. Maybe use a channel?
+        self.on_solution_found.send(solution).unwrap();
     }
 
     fn compute_routes_active_today(&mut self, time: &GtfsTime) {
