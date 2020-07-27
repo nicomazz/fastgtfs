@@ -92,7 +92,7 @@ impl fmt::Display for Solution {
         for c in &self.components {
             write!(f, "{}", c);
         }
-        write!(f,"####### ")
+        write!(f, "####### ")
     }
 }
 
@@ -305,7 +305,7 @@ impl<'a> RaptorNavigator<'a> {
 
             let prec_time_in_stop = self.t.entry((curr_stop.stop_id, hop_att - 1)).or_insert(GtfsTime::new_infinite());
 
-          //  println!("prec time in stop {:?}, att_time_at_stop {:?}", prec_time_in_stop, time_at_stop);
+            //  println!("prec time in stop {:?}, att_time_at_stop {:?}", prec_time_in_stop, time_at_stop);
             // we either don't have a trip already, or with other solutions we arrive there earlier
             if trip.is_none() || *prec_time_in_stop <= time_at_stop {
                 let new_trip: Option<(&Trip, usize)> = self.dataset.trip_after_time(
@@ -386,8 +386,8 @@ impl<'a> RaptorNavigator<'a> {
         println!("Time to process walking paths: {} ms. Final number of marked stops: {}", now.elapsed().as_millis(), self.marked_stops.len());
     }
     fn seconds_by_walk(&self, from: &LatLng, to: &LatLng) -> u64 {
-        let walking_speed_kmH = 4;
-        let meters_per_minute = walking_speed_kmH * 100 / 6;
+        let walking_speed_km_h = 4;
+        let meters_per_minute = walking_speed_km_h * 100 / 6;
 
         from.as_point().geodesic_distance(&to.as_point()) as u64 * 60 / meters_per_minute
     }
@@ -416,7 +416,7 @@ impl<'a> RaptorNavigator<'a> {
 
         // we reconstruct the solution from the last component to the first
         while att_stop != start_stop {
-           // println!("Att stop: {}", att_stop);
+            // println!("Att stop: {}", att_stop);
             let entry = (att_stop, att_kth);
             //assert!(self.p.contains_key(&entry));
             let backtrack_info = self.p
@@ -425,7 +425,7 @@ impl<'a> RaptorNavigator<'a> {
                     panic!("Can't find parent information for stop {}({}) (hop {})",
                            self.dataset.get_stop(att_stop).stop_name, att_stop,
                            hop_att));
-           // println!("backtraking: {:?}", backtrack_info);
+            // println!("backtraking: {:?}", backtrack_info);
             let prec_stop = backtrack_info.stop_id;
 
             if backtrack_info.is_walking_path() {
@@ -447,16 +447,16 @@ impl<'a> RaptorNavigator<'a> {
         }
         solution.set_last_component_start(self.start_stop.stop_id);
         solution.complete();
-        println!("Solution found! {}",solution);
+        println!("Solution found! {}", solution);
         // TODO send solution with the callback. Maybe use a channel?
     }
 
-    fn compute_routes_active_today(&mut self, _time: &GtfsTime) {
-        self.routes_active_this_day.clear();
-        // todo: compute routes active today
-        for r in &self.dataset.routes {
-            self.routes_active_this_day.insert(r.route_id);
-        }
+    fn compute_routes_active_today(&mut self, time: &GtfsTime) {
+        self.routes_active_this_day = self.dataset.routes
+            .iter()
+            .map(|r| r.route_id)
+            .filter(|&r| self.dataset.route_active_on_day(r, time))
+            .collect();
     }
 }
 

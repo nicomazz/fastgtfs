@@ -18,13 +18,13 @@ use cached::{
     proc_macro::cached,
     SizedCache,
 };
-use chrono::{Datelike, DateTime, Timelike, TimeZone, Utc};
+use chrono::{Datelike, DateTime, NaiveDate, NaiveTime, Timelike, TimeZone, Utc};
 use geo::{Coordinate, Point};
+use geo::algorithm::euclidean_distance::EuclideanDistance;
 use geo::algorithm::geodesic_distance::GeodesicDistance;
 use itertools::{enumerate, Itertools};
 use log::{debug, error, info, trace, warn};
 use serde::{Deserialize, Serialize};
-use geo::algorithm::euclidean_distance::EuclideanDistance;
 
 #[derive(Debug, Default, Serialize, Deserialize)]
 pub struct GtfsData {
@@ -35,6 +35,7 @@ pub struct GtfsData {
     pub trips: Vec<Trip>,
     pub shapes: Vec<Shape>,
     pub stops: Vec<Stop>,
+    pub services: Vec<Service>,
 
     pub stop_times: Vec<StopTimes>,
     //pub agencies: Vec<Agency>,
@@ -57,6 +58,9 @@ impl GtfsData {
         &self.stop_times[id]
     }
 
+    pub fn get_service(&self, id: usize) -> &Service {
+        &self.services[id]
+    }
 
     pub fn get_route_stop_times(&self, route_id: usize) -> &StopTimes {
         let route = self.get_route(route_id);
@@ -91,11 +95,6 @@ impl GtfsData {
             })
     }
 
-    pub fn trip_active_in_day(&self, trip_id: usize, time: GtfsTime) -> bool {
-        //todo
-        true
-    }
-
     // todo: overoptimize
     pub fn find_nearest_stop(&self, pos: LatLng) -> &Stop {
         let coord = pos.as_point();
@@ -116,6 +115,24 @@ impl GtfsData {
 
     pub fn get_near_stops(&self, pos: &LatLng, number: usize) -> Vec<usize> {
         near_stops(pos, number, &self.stops)
+    }
+
+    pub fn trip_active_on_day(&self, trip_id: usize, day: &GtfsTime) -> bool {
+        let trip = self.get_trip(trip_id);
+        if trip.service_id.is_none() { return true; }
+        let service = self.get_service(trip.service_id.unwrap());
+
+        for exception in &service.exceptions {
+            if exception.date.is_same_day(&day) {
+                return exception.running;
+            }
+        }
+        service.days[day.day_of_week() as usize]
+    }
+
+    pub fn route_active_on_day(&self, route_id: usize, day: &GtfsTime) -> bool {
+        let route = self.get_route(route_id);
+        route.trips.iter().any(|&t| self.trip_active_on_day(t, &day))
     }
 }
 
@@ -197,10 +214,11 @@ pub struct Trip {
     pub trip_id: usize,
     pub shape_id: usize,
     pub stop_times_id: usize,
+    pub service_id: Option<usize>,
+
     // todo: this points to a vec<StopTime>
     pub start_time: i64, // in seconds since midnight. To get all stop times use stop_times_id and add the start time to each.
 
-    pub(crate) service_id: String,
     pub(crate) trip_headsign: String,
     pub(crate) trip_short_name: String,
     pub(crate) direction_id: String,
@@ -224,14 +242,16 @@ impl GtfsTime {
         }
     }
 
-    pub fn new_from_timestamp(timestamp: i64) -> GtfsTime {
-        GtfsTime {
-            timestamp
-        }
-    }
+    pub fn new_from_timestamp(timestamp: i64) -> GtfsTime { GtfsTime { timestamp } }
 
     pub fn new_infinite() -> GtfsTime {
         GtfsTime::new_from_timestamp(u32::MAX as i64)
+    }
+
+    pub fn from_date(yyyymmdd: &String) -> GtfsTime {
+        let date = NaiveDate::parse_from_str(yyyymmdd, "%Y%m%d").unwrap();
+        let date = Utc.from_utc_date(&date).and_time(NaiveTime::from_hms(2, 0, 0)).unwrap();
+        GtfsTime::new_from_timestamp(date.timestamp())
     }
 
     pub fn set_day_from(&mut self, other: &GtfsTime) {
@@ -244,6 +264,9 @@ impl GtfsTime {
     }
     fn date_time(&self) -> DateTime<Utc> {
         Utc.timestamp(self.timestamp, 0)
+    }
+    pub fn is_same_day(&self, other: &GtfsTime) -> bool {
+        self.date_time().num_days_from_ce() == other.date_time().num_days_from_ce()
     }
     pub fn day_of_week(&self) -> u32 {
         self.date_time().weekday().num_days_from_monday()
@@ -284,6 +307,21 @@ pub fn to_coordinates(lat: &str, lng: &str) -> LatLng {
         lat: lat.parse::<f64>().unwrap_or(0.0),
         lng: lng.parse::<f64>().unwrap_or(0.0),
     }
+}
+
+#[derive(Debug, Default, Serialize, Deserialize, Clone)]
+pub struct Service {
+    pub service_id: usize,
+    pub days: Vec<bool>,
+    pub start_date: GtfsTime,
+    pub end_date: GtfsTime,
+    pub exceptions: Vec<ServiceException>,
+}
+
+#[derive(Debug, Default, Serialize, Deserialize, Clone)]
+pub struct ServiceException {
+    pub date: GtfsTime,
+    pub running: bool,
 }
 
 #[derive(Debug, Default, Serialize, Deserialize, Clone)]

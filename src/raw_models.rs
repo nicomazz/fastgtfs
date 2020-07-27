@@ -100,8 +100,29 @@ pub struct RawTrip {
     pub wheelchair_accessible: String,
 }
 
+#[derive(Debug, Deserialize, Default)]
+pub struct RawService {
+    pub service_id: String,
+    pub monday: String,
+    pub tuesday: String,
+    pub wednesday: String,
+    pub thursday: String,
+    pub friday: String,
+    pub saturday: String,
+    pub sunday: String,
+    pub start_date: String,
+    pub end_date: String,
+}
+
+#[derive(Debug, Deserialize, Default, Clone)]
+pub struct RawServiceException {
+    pub service_id: String,
+    pub date: String,
+    pub exception_type: String,
+}
+
 pub fn parse_gtfs<T: for<'de> serde::Deserialize<'de>>(path: &Path) -> Result<Vec<T>, Error> {
-    let file = File::open(&path).expect("File not found during parsing!");
+    let file = File::open(&path)?;
     Ok(csv::Reader::from_reader(file)
         .deserialize()
         .filter_map(Result::ok)

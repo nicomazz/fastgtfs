@@ -10,10 +10,8 @@ use log::debug;
 use rayon::iter::{IntoParallelIterator, IntoParallelRefIterator};
 use rayon::iter::ParallelIterator;
 
-use crate::gtfs_data::{
-    GtfsData, LatLng, Route, Shape, Stop, StopTime, StopTimes, to_coordinates, Trip,
-};
-use crate::raw_models::{parse_gtfs, RawRoute, RawShape, RawStop, RawStopTime, RawTrip};
+use crate::gtfs_data::{GtfsData, GtfsTime, LatLng, Route, Service, ServiceException, Shape, Stop, StopTime, StopTimes, to_coordinates, Trip};
+use crate::raw_models::{parse_gtfs, RawRoute, RawService, RawServiceException, RawShape, RawStop, RawStopTime, RawTrip};
 
 #[derive(Debug, Default)]
 pub struct RawParser {
@@ -24,6 +22,7 @@ pub struct RawParser {
     pub trip_name_to_inx: HashMap<String, usize>,
     pub shape_name_to_inx: HashMap<String, usize>,
     pub stop_name_to_inx: HashMap<String, usize>,
+    pub service_name_to_inx: HashMap<String, usize>,
 
     pub stop_times_inserted: HashMap<StopTimes, usize>,
 }
@@ -86,6 +85,7 @@ mod gtfs_serializer {
             serialize_vector(f.clone(), "shapes", ds.shapes),
             serialize_vector(f.clone(), "stops", ds.stops),
             serialize_vector(f.clone(), "stop_times", ds.stop_times),
+            serialize_vector(f.clone(), "services", ds.services),
         ]
             .into_iter()
             .for_each(|v| {
@@ -130,6 +130,7 @@ mod gtfs_deserializer {
         let shapes_t = deserialize_vector(folder.clone() + "/shapes");
         let stops_t = deserialize_vector(folder.clone() + "/stops");
         let stop_times_t = deserialize_vector(folder.clone() + "/stop_times");
+        let services_t = deserialize_vector(folder.clone() + "/services");
 
         GtfsData {
             dataset_id: 0,
@@ -137,6 +138,7 @@ mod gtfs_deserializer {
             trips: trips_t.join().unwrap(),
             shapes: shapes_t.join().unwrap(),
             stops: stops_t.join().unwrap(),
+            services: services_t.join().unwrap(),
             stop_times: stop_times_t.join().unwrap(),
         }
     }
@@ -214,6 +216,7 @@ impl RawParser {
         self.parse_stops(path);
         self.parse_shape(path);
         self.parse_routes(path);
+        self.parse_services(path);
         self.parse_trips(path);
         self.parse_stop_times(path);
         self.assign_routes_to_stops();
@@ -403,6 +406,53 @@ impl RawParser {
         })
     }
 
+    fn parse_services(&mut self, path: &Path) {
+        let services_path = Path::new(&path).join(Path::new("calendar.txt"));
+        let services_exceptions_path = Path::new(&path).join(Path::new("calendar_dates.txt"));
+        let raw_services: Vec<RawService> = parse_gtfs(&services_path)
+            .unwrap_or_else(|_| {
+                println!("calendar.txt not found!");
+                vec![]
+            });
+        let raw_services_exceptions: Vec<RawServiceException> = parse_gtfs(&services_exceptions_path)
+            .unwrap_or_else(|_| {
+                println!("calendar_dates.txt not found!");
+                vec![]
+            });
+
+        for service in raw_services {
+            let this_exceptions = raw_services_exceptions
+                .iter()
+                .filter(|e| e.service_id == service.service_id)
+                .cloned()
+                .collect();
+
+            self.add_service(service, this_exceptions);
+        }
+    }
+
+    fn add_service(&mut self, service: RawService, exceptions: Vec<RawServiceException>) {
+        let number_of_services = self.dataset.services.len();
+        self.service_name_to_inx
+            .insert(service.service_id.clone(), number_of_services);
+
+        self.dataset.services.push(Service {
+            service_id: number_of_services,
+            days: self.generate_service_days(&service),
+            start_date: GtfsTime::from_date(&service.start_date),
+            end_date: GtfsTime::from_date(&service.end_date),
+            exceptions: exceptions.into_iter().map(|e| ServiceException {
+                date: GtfsTime::from_date(&e.date),
+                running: e.exception_type == "1",
+            }).collect(),
+        })
+    }
+
+    fn generate_service_days(&self, service: &RawService) -> Vec<bool> {
+        let days = vec![&service.monday, &service.tuesday, &service.wednesday, &service.thursday, &service.friday, &service.saturday, &service.sunday];
+        days.into_iter().map(|d| d == "1").collect::<Vec<bool>>()
+    }
+
     fn parse_trips(&mut self, path: &Path) {
         let trips_path = Path::new(&path).join(Path::new("trips.txt"));
         let raw_trips: Vec<RawTrip> = parse_gtfs(&trips_path).expect("Raw trips parsing");
@@ -417,6 +467,10 @@ impl RawParser {
         let trip_id = number_of_trips;
         let route_id = *self.routes_name_to_inx.get(&trip.route_id).unwrap();
         let shape_id = *self.shape_name_to_inx.get(&trip.shape_id).unwrap();
+        let service_id_val = self.service_name_to_inx.get(&trip.service_id);
+        let mut service_id: Option<usize> = if let Some(s_id) = service_id_val {
+            Some(*s_id)
+        } else { None };
 
         self.dataset.trips.push(Trip {
             route_id,
@@ -424,7 +478,7 @@ impl RawParser {
             trip_id,
             stop_times_id: 0,
             start_time: 0,
-            service_id: trip.service_id,
+            service_id,
             trip_headsign: trip.trip_headsign,
             trip_short_name: trip.trip_short_name,
             direction_id: trip.direction_id,
