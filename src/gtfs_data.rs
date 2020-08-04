@@ -184,11 +184,11 @@ impl PartialEq for GtfsData {
 
 impl Eq for GtfsData {}
 
-#[derive(Debug, Default, Serialize, Deserialize)]
+#[derive(Debug, Default, Serialize, Deserialize,Clone)]
 pub struct Route {
     pub route_id: usize,
-    pub(crate) route_short_name: String,
-    pub(crate) route_long_name: String,
+    pub route_short_name: String,
+    pub route_long_name: String,
 
     pub trips: Vec<usize>,
     //pub stops: Vec<usize>, we get the stops from a trip stop_times
@@ -208,7 +208,7 @@ impl Route {
     }
 }
 
-#[derive(Debug, Default, Serialize, Deserialize)]
+#[derive(Debug, Default, Serialize, Deserialize,Clone)]
 pub struct Trip {
     pub route_id: usize,
     pub trip_id: usize,

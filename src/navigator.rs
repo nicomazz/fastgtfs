@@ -13,6 +13,7 @@ use rayon::prelude::IntoParallelRefIterator;
 
 use crate::gtfs_data::{GtfsData, GtfsTime, LatLng, Route, Stop, Trip};
 use std::sync::mpsc::Sender;
+use crate::navigator_models::{Solution, NavigationParams};
 
 #[derive(Debug)]
 pub struct RaptorNavigator<'a> {
@@ -57,17 +58,10 @@ pub struct RaptorNavigator<'a> {
 /// This is used to walk between stops when we change bus
 const NEAR_STOP_NUMBER: usize = 10;
 
-#[derive(Debug, Clone, Default)]
-pub struct NavigationParams {
-    pub from: LatLng,
-    pub to: LatLng,
-    pub max_changes: u8,
-    pub start_time: GtfsTime,
-    //pub sol_callback: Box<dyn Fn(Solution)>,
-}
+
 
 #[derive(Debug, Default)]
-struct BacktrackingInfo {
+pub struct BacktrackingInfo {
     trip_id: Option<usize>,
     route_id: Option<usize>,
     stop_id: usize,
@@ -80,94 +74,6 @@ impl BacktrackingInfo {
     fn is_walking_path(&self) -> bool {
         self.trip_id.is_none()
     }
-}
-
-#[derive(Debug, Default)]
-pub struct Solution {
-    start_time: GtfsTime,
-    duration_seconds: usize,
-    components: Vec<SolutionComponent>,
-}
-
-impl fmt::Display for Solution {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        writeln!(f, "\n####### Solution components: {}", self.components.len());
-        for c in &self.components {
-            write!(f, "{}", c);
-        }
-        write!(f, "####### ")
-    }
-}
-
-
-impl Solution {
-    fn set_last_component_start(&mut self, stop_id: usize) {
-        if let Some(last) = self.components.last_mut() {
-            if let SolutionComponent::Walk(w) = last {
-                w.stop_id = stop_id
-            }
-        }
-    }
-    fn add_walking_path(&mut self, stop_id: usize) {
-        let component = WalkSolutionComponent { stop_id };
-        self.set_last_component_start(stop_id);
-        self.components.push(SolutionComponent::Walk(component));
-    }
-
-    fn add_bus_path(&mut self, stop_id: usize, route_id: usize, trip_id: usize, from_inx: usize,
-                    to_inx: usize) {
-        let component = BusSolutionComponent {
-            route_id,
-            trip_id,
-            from_inx: Some(from_inx),
-            to_inx: Some(to_inx),
-        };
-        self.set_last_component_start(stop_id);
-        self.components.push(SolutionComponent::Bus(component));
-    }
-
-    fn complete(&mut self) {
-        self.components.reverse();
-    }
-}
-
-
-#[derive(Debug)]
-enum SolutionComponent {
-    Walk(WalkSolutionComponent),
-    Bus(BusSolutionComponent),
-}
-
-impl fmt::Display for SolutionComponent {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            SolutionComponent::Walk(w) => {
-                writeln!(f, "Walk path")
-            }
-            SolutionComponent::Bus(b) => {
-                writeln!(f, "Route {} from {} to {}", b.route_id, b.from_inx.unwrap(), b.to_inx.unwrap())
-            }
-        }
-    }
-}
-
-#[derive(Debug, Default)]
-struct BusSolutionComponent {
-    route_id: usize,
-    trip_id: usize,
-    /// Within the trip path, `from` and `to` which index
-    from_inx: Option<usize>,
-    to_inx: Option<usize>,
-}
-
-#[derive(Debug, Default)]
-struct WalkSolutionComponent {
-    stop_id: usize,
-}
-
-struct RouteStop {
-    route: usize,
-    stop: usize,
 }
 
 
@@ -194,7 +100,7 @@ impl<'a> RaptorNavigator<'a> {
     pub fn find_path(&mut self, params: NavigationParams) {
         self.init_navigation(params);
 
-        println!("Navigation from {} to {} started", self.start_stop.stop_name, self.end_stop.stop_name);
+        debug!("Navigation from {} to {} started", self.start_stop.stop_name, self.end_stop.stop_name);
         self.navigate();
     }
 
@@ -217,10 +123,10 @@ impl<'a> RaptorNavigator<'a> {
     fn navigate(&mut self) {
         let now = Instant::now();
         for hop in 1..self.navigation_params.max_changes {
-            println!("---- hop {}", hop);
+            trace!("---- hop {}", hop);
             // Let's get all the routespassing trougth the stops marked
             let route_stops_to_consider = self.build_route_stop();
-            println!("Considering {} route_stops", route_stops_to_consider.len());
+            trace!("Considering {} route_stops", route_stops_to_consider.len());
 
             for (route_id, stop_inx) in route_stops_to_consider {
                 self.handle_route_stop(route_id, stop_inx, hop);
@@ -228,12 +134,12 @@ impl<'a> RaptorNavigator<'a> {
 
             self.add_walking_path(hop);
         }
-        println!("Navigation finished in: {} ms", now.elapsed().as_millis());
+        trace!("Navigation finished in: {} ms", now.elapsed().as_millis());
     }
 
     /// For each marked stop, tries to reach the new possible ones
     fn build_route_stop(&mut self) -> BTreeMap<usize, usize> { // route_id -> stop_id
-        println!("Building route stop");
+        trace!("Building route stop");
         let to_consider = self.marked_stops.iter()
             .map(|stop_id| self.dataset.get_stop(*stop_id))
             .collect::<Vec<&Stop>>();
@@ -247,13 +153,13 @@ impl<'a> RaptorNavigator<'a> {
             }
         }
         self.marked_stops.clear();
-        println!("route stops to consider now: {}", routes_to_consider.len());
+        trace!("route stops to consider now: {}", routes_to_consider.len());
         routes_to_consider
     }
 
     /// take all the routes that pass in this stop
     fn consider_stop(&self, stop: &Stop) {
-        println!("considering stop {}", stop.stop_name);
+        trace!("considering stop {}", stop.stop_name);
         stop.routes
             .iter().map(|route_id| self.dataset.get_route(*route_id))
             .for_each(|route| {
@@ -269,7 +175,7 @@ impl<'a> RaptorNavigator<'a> {
         }
         let route = self.dataset.get_route(route_id);
         let stop_times = &self.dataset.get_route_stop_times(route_id).stop_times;
-        //println!("considering route {} start_stop_inx {}/{}", route.route_long_name, start_stop_inx, stop_times.len());
+        //trace!("considering route {} start_stop_inx {}/{}", route.route_long_name, start_stop_inx, stop_times.len());
         let start_stop_id = stop_times[start_stop_inx].stop_id;
 
         let mut trip: Option<usize> = None;
@@ -309,7 +215,7 @@ impl<'a> RaptorNavigator<'a> {
 
             let prec_time_in_stop = self.t.entry((curr_stop.stop_id, hop_att - 1)).or_insert(GtfsTime::new_infinite());
 
-            //  println!("prec time in stop {:?}, att_time_at_stop {:?}", prec_time_in_stop, time_at_stop);
+            //  trace!("prec time in stop {:?}, att_time_at_stop {:?}", prec_time_in_stop, time_at_stop);
             // we either don't have a trip already, or with other solutions we arrive there earlier
             if trip.is_none() || *prec_time_in_stop <= time_at_stop {
                 let new_trip: Option<(&Trip, usize)> = self.dataset.trip_after_time(
@@ -354,7 +260,7 @@ impl<'a> RaptorNavigator<'a> {
     /// Let's add the near stop to each one marked
     fn add_walking_path(&mut self, hop_att: u8) {
         // TODO do benchmark  this, it might be very, very expensive!
-        println!("Adding walking paths. Initial number of marked stops: {}", self.marked_stops.len());
+        trace!("Adding walking paths. Initial number of marked stops: {}", self.marked_stops.len());
         let now = Instant::now();
         let original_best_times = self.tbest.clone();
 
@@ -387,7 +293,7 @@ impl<'a> RaptorNavigator<'a> {
         };
         self.marked_stops = self.marked_stops.clone().into_iter().unique().collect();
 
-        println!("Time to process walking paths: {} ms. Final number of marked stops: {}", now.elapsed().as_millis(), self.marked_stops.len());
+        trace!("Time to process walking paths: {} ms. Final number of marked stops: {}", now.elapsed().as_millis(), self.marked_stops.len());
     }
     fn seconds_by_walk(&self, from: &LatLng, to: &LatLng) -> u64 {
         let walking_speed_km_h = 4;
@@ -400,7 +306,7 @@ impl<'a> RaptorNavigator<'a> {
         for near_stop_dest in self.stops_near_destination_list.clone() {
             let entry = (near_stop_dest, hop_att);
             if self.p.contains_key(&entry) {
-                println!("Can arrive at destination from {} with {} hops", near_stop_dest, hop_att);
+                trace!("Can arrive at destination from {} with {} hops", near_stop_dest, hop_att);
                 self.reconstruct_solution(near_stop_dest, hop_att);
                 dest_to_clear.push(entry);
             }
@@ -420,7 +326,7 @@ impl<'a> RaptorNavigator<'a> {
 
         // we reconstruct the solution from the last component to the first
         while att_stop != start_stop {
-            // println!("Att stop: {}", att_stop);
+            // trace!("Att stop: {}", att_stop);
             let entry = (att_stop, att_kth);
             //assert!(self.p.contains_key(&entry));
             let backtrack_info = self.p
@@ -429,7 +335,7 @@ impl<'a> RaptorNavigator<'a> {
                     panic!("Can't find parent information for stop {}({}) (hop {})",
                            self.dataset.get_stop(att_stop).stop_name, att_stop,
                            hop_att));
-            // println!("backtraking: {:?}", backtrack_info);
+            // trace!("backtraking: {:?}", backtrack_info);
             let prec_stop = backtrack_info.stop_id;
 
             if backtrack_info.is_walking_path() {
@@ -438,8 +344,10 @@ impl<'a> RaptorNavigator<'a> {
                 continue;
             }
 
-            let prec_trip = backtrack_info.trip_id.unwrap();
-            let prec_route = backtrack_info.route_id.unwrap();
+            let prec_trip_id = backtrack_info.trip_id.unwrap();
+            let prec_trip = self.dataset.get_trip(prec_trip_id);
+            let prec_route_id = backtrack_info.route_id.unwrap();
+            let prec_route = self.dataset.get_route(prec_route_id);
 
             solution.add_bus_path(att_stop,
                                   prec_route,
