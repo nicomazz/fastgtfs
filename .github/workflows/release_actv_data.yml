@@ -18,6 +18,8 @@ jobs:
     - uses: actions/checkout@v2
     - name: Build
       run: cargo build --verbose
+    - name: download dataset
+      run: cd test_data/ && ./download_test_data.sh && cd -
     - name: Run tests
       run: cargo test --verbose
     - name: compress files
