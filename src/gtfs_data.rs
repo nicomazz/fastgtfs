@@ -219,11 +219,11 @@ pub struct Trip {
     // todo: this points to a vec<StopTime>
     pub start_time: i64, // in seconds since midnight. To get all stop times use stop_times_id and add the start time to each.
 
-    pub(crate) trip_headsign: String,
-    pub(crate) trip_short_name: String,
-    pub(crate) direction_id: String,
-    pub(crate) block_id: String,
-    pub(crate) wheelchair_accessible: String,
+    pub trip_headsign: String,
+    pub trip_short_name: String,
+    pub direction_id: String,
+    pub block_id: String,
+    pub wheelchair_accessible: String,
 }
 
 #[derive(Debug, Default, Serialize, Deserialize, Clone, Eq, Ord, PartialEq, PartialOrd)]

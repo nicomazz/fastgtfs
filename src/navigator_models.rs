@@ -13,7 +13,7 @@ pub struct NavigationParams {
 
 #[derive(Debug, Default)]
 pub struct Solution {
-    pub(crate) start_time: GtfsTime,
+    pub start_time: GtfsTime,
     pub duration_seconds: usize,
     pub components: Vec<SolutionComponent>,
 }

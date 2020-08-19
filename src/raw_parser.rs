@@ -72,7 +72,8 @@ mod gtfs_serializer {
         thread::spawn(move || {
             let mut buffer = flexbuffers::FlexbufferSerializer::new();
             v.serialize(&mut buffer).unwrap();
-            let mut output_file = File::create(format!("{}/{}", out_path, name)).unwrap();
+            let out_file_name = &format!("{}/{}", out_path, name);
+            let mut output_file = File::create(out_file_name).expect(&format!("Can't create {}",out_file_name));
             output_file.write_all(buffer.view()).unwrap();
         })
     }
@@ -168,12 +169,17 @@ impl RawParser {
         println!("Reading serialized data in: {}", now.elapsed().as_millis());
         res
     }
-
     pub fn ensure_data_serialized_created(&mut self) {
+        self.ensure_data_serialized_created_in_path(DEFAULT_OUT_PATH)
+    }
+
+
+    pub fn ensure_data_serialized_created_in_path(&mut self, path: &str) {
         println!("Ensuring data serialized");
-        let routes_file = format!("{}/routes", DEFAULT_OUT_PATH);
+        // todo, also check the version of the data
+        let routes_file = format!("{}/routes", path);
         if !Path::new(&routes_file).exists() {
-            self.generate_serialized_data_into_default();
+            self.generate_serialized_data(path);
             return;
         }
 
@@ -185,7 +191,7 @@ impl RawParser {
         println!("Last modified: {}", last_modified);
         if last_modified > 60 * 60 { // rebuild the data every hour
             println!("Generating serializable data!");
-            self.generate_serialized_data_into_default();
+            self.generate_serialized_data(path);
         }
     }
 
@@ -195,10 +201,13 @@ impl RawParser {
     }
 
     pub fn generate_serialized_data(&mut self, out_folder: &str) {
-        if !Path::new(out_folder).exists() {
+        let path = self.paths.first().unwrap();
+        let destination_folder = &format!("{}/{}",path,out_folder);
+        if !Path::new(destination_folder).exists() {
             println!("Creating output path!");
-            fs::create_dir_all(out_folder).expect("Can't create output folder!");
+            fs::create_dir_all(destination_folder).expect(&format!("Can't create output folder {}", destination_folder));
         }
+        println!("Creating serialized data!");
         self.parse();
         let ds = std::mem::take(&mut self.dataset);
         gtfs_serializer::generate_serialized_data(ds, out_folder.to_string());
