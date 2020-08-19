@@ -1,0 +1,32 @@
+name: Rust
+
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v2
+    - name: Build
+      run: cargo build --verbose
+    - name: Run tests
+      run: cargo test --verbose
+    - name: compress files
+      run: zip -r gtfs_data.zip gtfs_serialized
+    - name: Upload results to github release
+      run: curl -s https://api.github.com/repos/github-release/github-release/releases/latest \
+            | grep browser_download_url | grep linux | cut -d '"' -f 4 | wget -qi - ; \
+            bzip2 -d linux-amd64-github-release.bz2 \
+            chmod +x linux-amd64-github-release \
+            GITHUB_TOKEN=${{secrets.SECRET_API}} ./linux-amd64-github-release upload \
+              --user nicomazz --repo Orari-Autobus-Actv \
+              --file gtfs_data.zip --tag data
