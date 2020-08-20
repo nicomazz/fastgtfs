@@ -22,19 +22,5 @@ jobs:
       run: cd test_data/ && ./download_test_data.sh && cd -
     - name: Run tests
       run: cargo test --verbose
-    - name: compress files
-      run: zip -r gtfs_data.zip gtfs_serialized
-    - name: Upload results to github release
-      run: curl -s https://api.github.com/repos/github-release/github-release/releases/latest \
-            | grep browser_download_url | grep linux | cut -d '"' -f 4 | wget -qi - ; \
-            bzip2 -d linux-amd64-github-release.bz2; \
-            chmod +x linux-amd64-github-release; \
-    - name: Do release and upload data
-      run: THIS_TAG=`date +%s%3N`; ./linux-amd64-github-release release \
-           --user nicomazz --repo Orari-Autobus-Actv \
-          --tag $THIS_TAG \
-           -s ${{secrets.SECRET_API}}; \
-            ./linux-amd64-github-release upload \
-              -s ${{secrets.SECRET_API}} \
-              --user nicomazz --repo Orari-Autobus-Actv \
-              --file gtfs_data.zip --tag $THIS_TAG;
+    - name: Upload release (if needed)
+      run: test_data/do_release.sh ${{secrets.SECRET_API}}
