@@ -6,16 +6,16 @@ OUTPUT_GTFS_ZIP=${OUTPUT_FOLDER}.zip
 PREVIOUS_RELEASE="old_dataset.zip"
 
 zip_preprocessed_data() {
-  zip -r $OUTPUT_GTFS_ZIP $OUTPUT_FOLDER
+  zip -r $OUTPUT_GTFS_ZIP --junk-paths $OUTPUT_FOLDER
 }
 
 install_ghr() {
   curl -s https://api.github.com/repos/tcnksm/ghr/releases/latest \
            | grep browser_download_url | grep linux_amd | cut -d '"' -f 4 | wget -qi - ;
 
-  tar xvzf ghr_v0.13.0_linux_amd64.tar.gz
-  chmod +x ghr_v0.13.0_linux_amd64/ghr
-  cp ghr_v0.13.0_linux_amd64/ghr ghr
+  tar xvzf ghr_v*_linux_amd64.tar.gz
+  chmod +x ghr_v*_linux_amd64/ghr
+  cp ghr_v*_linux_amd64/ghr ghr
 }
 
 download_old_gtfs_data_release() {
@@ -33,6 +33,7 @@ do_release() {
 
 clean_files() {
   rm $OUTPUT_GTFS_ZIP $PREVIOUS_RELEASE
+  rm -r ghr*
 }
 export GITHUB_TOKEN=$1
 
