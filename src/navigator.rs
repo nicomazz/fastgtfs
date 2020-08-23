@@ -6,9 +6,8 @@ use std::time::Instant;
 use geo::algorithm::geodesic_distance::GeodesicDistance;
 use itertools::Itertools;
 use log::{debug, trace};
-use rayon::iter::ParallelIterator;
 
-use crate::gtfs_data::{GtfsData, GtfsTime, LatLng, Route, Stop, Trip};
+use crate::gtfs_data::{GtfsData, GtfsTime, LatLng, Stop, Trip};
 use crate::navigator_models::{NavigationParams, Solution};
 
 #[derive(Debug)]
@@ -151,7 +150,7 @@ impl<'a> RaptorNavigator<'a> {
         trace!("route stops to consider now: {}", routes_to_consider.len());
         routes_to_consider
     }
-
+/*
     /// take all the routes that pass in this stop
     fn consider_stop(&self, stop: &Stop) {
         trace!("considering stop {}", stop.stop_name);
@@ -162,7 +161,7 @@ impl<'a> RaptorNavigator<'a> {
             });
     }
     /// traverse all the route's trip, and
-    fn consider_route(&self, _stop: &Stop, _route: &Route) {}
+    fn consider_route(&self, _stop: &Stop, _route: &Route) {}*/
 
     fn handle_route_stop(&mut self, route_id: usize, start_stop_inx: usize, hop_att: u8) { // returns new best solutions
         if !self.routes_active_this_day.contains(&route_id) {

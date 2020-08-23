@@ -3,7 +3,6 @@ extern crate serde;
 
 use std::cmp::Ordering;
 use std::collections::{BTreeSet, HashSet};
-use std::io::{Error, Read, Seek, SeekFrom};
 use std::time::SystemTime;
 
 use cached::{
@@ -65,7 +64,7 @@ impl GtfsData {
         let stop_times = &self.get_route_stop_times(route_id).stop_times;
         let trips_duration = stop_times.last().unwrap().time;
 
-        /// indexes of the stops in `stop_times` matching `stop_id`
+        // indexes of the stops in `stop_times` matching `stop_id`
         let inxes_for_stop = stop_times
             .iter()
             .skip(start_stop_inx)
