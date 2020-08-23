@@ -6,7 +6,7 @@ use std::path::Path;
 use std::time::Instant;
 
 use itertools::Itertools;
-use log::debug;
+use log::{debug,trace};
 use rayon::iter::{IntoParallelIterator, IntoParallelRefIterator};
 use rayon::iter::ParallelIterator;
 
@@ -170,6 +170,7 @@ impl RawParser {
         res
     }
     pub fn ensure_data_serialized_created(&mut self) {
+        fs::create_dir_all(DEFAULT_OUT_PATH).unwrap();
         self.ensure_data_serialized_created_in_path(DEFAULT_OUT_PATH)
     }
 
@@ -250,7 +251,6 @@ impl RawParser {
         });
 
         for (stop_id, routes) in routes_for_stop_id {
-            debug!("stop id: {} number of routes: {}", stop_id, routes.len());
             let stop = &mut self.dataset.stops[stop_id];
             routes.iter().for_each(|r_id| {
                 stop.routes.insert(*r_id);
