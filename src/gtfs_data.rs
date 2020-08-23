@@ -295,7 +295,7 @@ pub struct Shape {
 pub struct Stop {
     pub stop_id: usize,
     pub stop_name: String,
-    pub(crate) stop_pos: LatLng,
+    pub stop_pos: LatLng,
     pub(crate) stop_timezone: String,
 
     pub routes: BTreeSet<usize>,
