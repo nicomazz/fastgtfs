@@ -1,18 +1,11 @@
-use std::borrow::ToOwned;
 use std::iter::Iterator;
-use std::sync::Mutex;
-#[cfg(test)]
-use std::time::{Duration, Instant};
 
+#[cfg(test)]
 #[cfg(test)]
 use itertools::Itertools;
-use lazy_static::lazy_static;
-#[cfg(test)]
-use log::{debug, error, info, trace, warn};
-use rayon::iter::IntoParallelRefIterator;
 
+#[cfg(test)]
 use fastgtfs::gtfs_data::GtfsData;
-use fastgtfs::test_utils::{assert_dataset_filled, get_test_paths};
 
 #[test]
 fn basic_parsing() {

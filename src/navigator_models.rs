@@ -1,6 +1,6 @@
 use std::fmt;
+
 use crate::gtfs_data::{GtfsTime, LatLng, Route, Trip};
-use crate::navigator::RaptorNavigator;
 
 #[derive(Debug, Clone, Default)]
 pub struct NavigationParams {
@@ -44,7 +44,7 @@ impl Solution {
     }
 
     pub(crate) fn add_bus_path(&mut self, stop_id: usize, route: &Route, trip: &Trip, from_inx: usize,
-                    to_inx: usize) {
+                               to_inx: usize) {
         let component = BusSolutionComponent {
             route: route.clone(),
             trip: trip.clone(),
@@ -58,7 +58,6 @@ impl Solution {
     pub(crate) fn complete(&mut self) {
         self.components.reverse();
     }
-
 }
 
 
@@ -71,7 +70,7 @@ pub enum SolutionComponent {
 impl fmt::Display for SolutionComponent {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            SolutionComponent::Walk(w) => {
+            SolutionComponent::Walk(_w) => {
                 writeln!(f, "Walk path")
             }
             SolutionComponent::Bus(b) => {

@@ -1,19 +1,15 @@
-use core::{default, fmt};
 use std::cmp::{max, min};
-use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
+use std::collections::{BTreeMap, HashMap, HashSet};
+use std::sync::mpsc::Sender;
 use std::time::Instant;
 
 use geo::algorithm::geodesic_distance::GeodesicDistance;
-use geo::prelude::EuclideanDistance;
 use itertools::Itertools;
-use log::{debug, info, trace};
-use rayon::iter::IntoParallelIterator;
+use log::{debug, trace};
 use rayon::iter::ParallelIterator;
-use rayon::prelude::IntoParallelRefIterator;
 
 use crate::gtfs_data::{GtfsData, GtfsTime, LatLng, Route, Stop, Trip};
-use std::sync::mpsc::Sender;
-use crate::navigator_models::{Solution, NavigationParams};
+use crate::navigator_models::{NavigationParams, Solution};
 
 #[derive(Debug)]
 pub struct RaptorNavigator<'a> {
@@ -59,7 +55,6 @@ pub struct RaptorNavigator<'a> {
 const NEAR_STOP_NUMBER: usize = 10;
 
 
-
 #[derive(Debug, Default)]
 pub struct BacktrackingInfo {
     trip_id: Option<usize>,
@@ -78,7 +73,7 @@ impl BacktrackingInfo {
 
 
 impl<'a> RaptorNavigator<'a> {
-    pub fn new(dataset: &GtfsData, on_solution_found : Sender<Solution>) -> RaptorNavigator {
+    pub fn new(dataset: &GtfsData, on_solution_found: Sender<Solution>) -> RaptorNavigator {
         RaptorNavigator {
             dataset,
             start_stop: Default::default(),
@@ -167,13 +162,13 @@ impl<'a> RaptorNavigator<'a> {
             });
     }
     /// traverse all the route's trip, and
-    fn consider_route(&self, stop: &Stop, route: &Route) {}
+    fn consider_route(&self, _stop: &Stop, _route: &Route) {}
 
     fn handle_route_stop(&mut self, route_id: usize, start_stop_inx: usize, hop_att: u8) { // returns new best solutions
         if !self.routes_active_this_day.contains(&route_id) {
             return;
         }
-        let route = self.dataset.get_route(route_id);
+        let _route = self.dataset.get_route(route_id);
         let stop_times = &self.dataset.get_route_stop_times(route_id).stop_times;
         //trace!("considering route {} start_stop_inx {}/{}", route.route_long_name, start_stop_inx, stop_times.len());
         let start_stop_id = stop_times[start_stop_inx].stop_id;
@@ -327,7 +322,7 @@ impl<'a> RaptorNavigator<'a> {
         // we reconstruct the solution from the last component to the first
         while att_stop != start_stop {
             // trace!("Att stop: {}", att_stop);
-            let entry = (att_stop, att_kth);
+            let _entry = (att_stop, att_kth);
             //assert!(self.p.contains_key(&entry));
             let backtrack_info = self.p
                 .get(&(att_stop, att_kth))

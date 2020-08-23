@@ -2,14 +2,12 @@ use std::collections::HashMap;
 use std::path::Path;
 
 use itertools::Itertools;
-use log::{debug, error, info, trace, warn};
-use rayon::iter::{IntoParallelIterator, IntoParallelRefIterator};
 use rayon::iter::ParallelIterator;
 
 use fastgtfs::gtfs_data::{StopTime, StopTimes};
 use fastgtfs::raw_models::{parse_gtfs, RawCalendar, RawRoute};
 use fastgtfs::raw_parser::RawParser;
-use fastgtfs::test_utils::{assert_dataset_filled, generate_serialized_data, get_test_paths, make_dataset};
+use fastgtfs::test_utils::{generate_serialized_data, get_test_paths, make_dataset};
 
 #[test]
 fn routes_parsing() {
@@ -103,7 +101,7 @@ fn test_routes_per_stop() {
         .map(|s| (s.stop_name.clone(), s.routes.len()))
         .collect::<Vec<(String, usize)>>();
 
-    println!("Stops without routes: {}/{}\n {:?}",alone_stops.len(), ds.stops.len(),alone_stops);
+    println!("Stops without routes: {}/{}\n {:?}", alone_stops.len(), ds.stops.len(), alone_stops);
     assert!(alone_stops.len() < ds.stops.len() / 20);
 }
 

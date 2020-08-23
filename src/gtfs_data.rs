@@ -2,16 +2,8 @@ extern crate flexbuffers;
 extern crate serde;
 
 use std::cmp::Ordering;
-use std::collections::{BTreeSet, HashMap, HashSet};
-use std::fmt::format;
-use std::fs::File;
+use std::collections::{BTreeSet, HashSet};
 use std::io::{Error, Read, Seek, SeekFrom};
-use std::path::Path;
-use std::rc::Rc;
-use std::sync::{Arc, RwLock};
-use std::thread;
-use std::thread::sleep;
-use std::time::Duration;
 use std::time::SystemTime;
 
 use cached::{
@@ -22,8 +14,7 @@ use chrono::{Datelike, DateTime, NaiveDate, NaiveTime, Timelike, TimeZone, Utc};
 use geo::{Coordinate, Point};
 use geo::algorithm::euclidean_distance::EuclideanDistance;
 use geo::algorithm::geodesic_distance::GeodesicDistance;
-use itertools::{enumerate, Itertools};
-use log::{debug, error, info, trace, warn};
+use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Default, Serialize, Deserialize)]
@@ -68,7 +59,7 @@ impl GtfsData {
         self.get_stop_times(trip.stop_times_id)
     }
     /// returns the first trip that has `stop` (with inx after `start_stop_inx`) after time (not in excluded_trips)
-    pub fn trip_after_time(&self, route_id: usize, stop_id: usize, min_time: &GtfsTime, start_stop_inx: usize, excluded_trips: HashSet<usize>) -> Option<(&Trip, usize)> {
+    pub fn trip_after_time(&self, route_id: usize, stop_id: usize, min_time: &GtfsTime, start_stop_inx: usize, _excluded_trips: HashSet<usize>) -> Option<(&Trip, usize)> {
         let route = self.get_route(route_id);
         let trips = &route.trips;
         let stop_times = &self.get_route_stop_times(route_id).stop_times;
@@ -79,7 +70,7 @@ impl GtfsData {
             .iter()
             .skip(start_stop_inx)
             .enumerate()
-            .filter(|(inx, stop_time)| stop_time.stop_id == stop_id)
+            .filter(|(_inx, stop_time)| stop_time.stop_id == stop_id)
             .map(|(inx, _)| inx)
             .collect::<Vec<usize>>();
 
@@ -184,7 +175,7 @@ impl PartialEq for GtfsData {
 
 impl Eq for GtfsData {}
 
-#[derive(Debug, Default, Serialize, Deserialize,Clone)]
+#[derive(Debug, Default, Serialize, Deserialize, Clone)]
 pub struct Route {
     pub route_id: usize,
     pub route_short_name: String,
@@ -208,7 +199,7 @@ impl Route {
     }
 }
 
-#[derive(Debug, Default, Serialize, Deserialize,Clone)]
+#[derive(Debug, Default, Serialize, Deserialize, Clone)]
 pub struct Trip {
     pub route_id: usize,
     pub trip_id: usize,

@@ -1,4 +1,3 @@
-use std::borrow::BorrowMut;
 use std::collections::HashMap;
 use std::fs;
 use std::fs::File;
@@ -6,7 +5,6 @@ use std::path::Path;
 use std::time::Instant;
 
 use itertools::Itertools;
-use log::{debug,trace};
 use rayon::iter::{IntoParallelIterator, IntoParallelRefIterator};
 use rayon::iter::ParallelIterator;
 
@@ -73,7 +71,7 @@ mod gtfs_serializer {
             let mut buffer = flexbuffers::FlexbufferSerializer::new();
             v.serialize(&mut buffer).unwrap();
             let out_file_name = &format!("{}/{}", out_path, name);
-            let mut output_file = File::create(out_file_name).expect(&format!("Can't create {}",out_file_name));
+            let mut output_file = File::create(out_file_name).expect(&format!("Can't create {}", out_file_name));
             output_file.write_all(buffer.view()).unwrap();
         })
     }
@@ -203,7 +201,7 @@ impl RawParser {
 
     pub fn generate_serialized_data(&mut self, out_folder: &str) {
         let path = self.paths.first().unwrap();
-        let destination_folder = &format!("{}/{}",path,out_folder);
+        let destination_folder = &format!("{}/{}", path, out_folder);
         if !Path::new(destination_folder).exists() {
             println!("Creating output path!");
             fs::create_dir_all(destination_folder).expect(&format!("Can't create output folder {}", destination_folder));
@@ -233,7 +231,7 @@ impl RawParser {
     }
 
     fn assign_routes_to_stops(&mut self) {
-        let mut ds = &mut self.dataset;
+        let ds = &mut self.dataset;
         let routes = &ds.routes;
         let mut routes_for_stop_id: HashMap<usize, Vec<usize>> = HashMap::new(); // stop_id -> Vec<route_id>
 
@@ -477,7 +475,7 @@ impl RawParser {
         let route_id = *self.routes_name_to_inx.get(&trip.route_id).unwrap();
         let shape_id = *self.shape_name_to_inx.get(&trip.shape_id).unwrap();
         let service_id_val = self.service_name_to_inx.get(&trip.service_id);
-        let mut service_id: Option<usize> = if let Some(s_id) = service_id_val {
+        let service_id: Option<usize> = if let Some(s_id) = service_id_val {
             Some(*s_id)
         } else { None };
 

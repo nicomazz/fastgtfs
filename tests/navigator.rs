@@ -5,7 +5,6 @@ use chrono::NaiveDate;
 
 use fastgtfs::gtfs_data::GtfsTime;
 
-
 fn default_start_time() -> GtfsTime {
     let start_timestamp = NaiveDate::from_ymd(2020, 07, 25).and_hms(17, 33, 44).timestamp();
     GtfsTime::new_from_timestamp(start_timestamp)
@@ -17,17 +16,15 @@ mod tests {
     use std::sync::mpsc::{Receiver, Sender};
     use std::thread;
 
-    use chrono::NaiveDate;
     use log::debug;
 
-    use fastgtfs::gtfs_data::{GtfsTime, LatLng};
+    use fastgtfs::gtfs_data::LatLng;
     use fastgtfs::navigator::RaptorNavigator;
     use fastgtfs::navigator_models::{NavigationParams, Solution};
     use fastgtfs::raw_parser::RawParser;
     use fastgtfs::test_utils::get_test_paths;
 
     use crate::default_start_time;
-    use env_logger::WriteStyle;
 
     fn init() {
         let _ = env_logger::builder()
