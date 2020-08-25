@@ -1,14 +1,17 @@
 use std::collections::HashMap;
 use std::fs;
 use std::fs::File;
+use std::io::Read;
 use std::path::Path;
 use std::time::Instant;
 
+use geo::algorithm::euclidean_distance::EuclideanDistance;
+use geo::algorithm::geodesic_distance::GeodesicDistance;
 use itertools::Itertools;
 use rayon::iter::{IntoParallelIterator, IntoParallelRefIterator};
 use rayon::iter::ParallelIterator;
 
-use crate::gtfs_data::{GtfsData, GtfsTime, LatLng, Route, Service, ServiceException, Shape, Stop, StopTime, StopTimes, to_coordinates, Trip};
+use crate::gtfs_data::{GtfsData, GtfsTime, LatLng, Route, Service, ServiceException, Shape, Stop, StopDistance, StopTime, StopTimes, StopWalkTime, to_coordinates, Trip};
 use crate::raw_models::{parse_gtfs, RawRoute, RawService, RawServiceException, RawShape, RawStop, RawStopTime, RawTrip};
 
 #[derive(Debug, Default)]
@@ -85,6 +88,7 @@ mod gtfs_serializer {
             serialize_vector(f.clone(), "stops", ds.stops),
             serialize_vector(f.clone(), "stop_times", ds.stop_times),
             serialize_vector(f.clone(), "services", ds.services),
+            serialize_vector(f.clone(), "walk_times", ds.walk_times),
         ]
             .into_iter()
             .for_each(|v| {
@@ -94,8 +98,6 @@ mod gtfs_serializer {
 }
 
 mod gtfs_deserializer {
-    use std::fs::File;
-    use std::io::Read;
     use std::path::Path;
     use std::thread;
     use std::thread::JoinHandle;
@@ -105,6 +107,7 @@ mod gtfs_deserializer {
     use serde::Deserialize;
 
     use crate::gtfs_data::GtfsData;
+    use crate::raw_parser::read_file;
 
     fn deserialize_vector<T: 'static + DeserializeOwned + Sync + Send>(
         in_file: String,
@@ -130,6 +133,7 @@ mod gtfs_deserializer {
         let stops_t = deserialize_vector(folder.clone() + "/stops");
         let stop_times_t = deserialize_vector(folder.clone() + "/stop_times");
         let services_t = deserialize_vector(folder.clone() + "/services");
+        let walk_times_t = deserialize_vector(folder.clone() + "/walk_times");
 
         GtfsData {
             dataset_id: 0,
@@ -139,14 +143,15 @@ mod gtfs_deserializer {
             stops: stops_t.join().unwrap(),
             services: services_t.join().unwrap(),
             stop_times: stop_times_t.join().unwrap(),
+            walk_times: walk_times_t.join().unwrap(),
         }
     }
+}
 
-    fn read_file(path: &Path) -> Vec<u8> {
-        let mut content = vec![];
-        File::open(path).unwrap().read_to_end(&mut content).unwrap();
-        content
-    }
+fn read_file(path: &Path) -> Vec<u8> {
+    let mut content = vec![];
+    File::open(path).unwrap().read_to_end(&mut content).unwrap();
+    content
 }
 
 impl RawParser {
@@ -155,6 +160,26 @@ impl RawParser {
             paths,
             ..Default::default()
         }
+    }
+
+    pub fn parse(&mut self) {
+        self.paths
+            .clone()
+            .iter()
+            .map(|p| Path::new(p))
+            .for_each(|p| self.parse_path(p));
+        self.try_parse_walk_paths();
+    }
+
+
+    fn parse_path(&mut self, path: &Path) {
+        self.parse_stops(path);
+        self.parse_shape(path);
+        self.parse_routes(path);
+        self.parse_services(path);
+        self.parse_trips(path);
+        self.parse_stop_times(path);
+        self.assign_routes_to_stops();
     }
 
     pub fn read_preprocessed_data_from_default() -> GtfsData {
@@ -212,23 +237,6 @@ impl RawParser {
         gtfs_serializer::generate_serialized_data(ds, out_folder.to_string());
     }
 
-    pub fn parse(&mut self) {
-        self.paths
-            .clone()
-            .iter()
-            .map(|p| Path::new(p))
-            .for_each(|p| self.parse_path(p));
-    }
-
-    fn parse_path(&mut self, path: &Path) {
-        self.parse_stops(path);
-        self.parse_shape(path);
-        self.parse_routes(path);
-        self.parse_services(path);
-        self.parse_trips(path);
-        self.parse_stop_times(path);
-        self.assign_routes_to_stops();
-    }
 
     fn assign_routes_to_stops(&mut self) {
         let ds = &mut self.dataset;
@@ -496,4 +504,101 @@ impl RawParser {
         let route_associated: &mut Route = self.dataset.routes.get_mut(route_id as usize).unwrap();
         route_associated.trips.push(trip_id);
     }
+
+    fn try_parse_walk_paths(&mut self) {
+        for path in self.paths.clone() {
+            let path = Path::new(&path);
+            if path.parent().is_some() {
+                let walk_file_path = path.parent().unwrap().join("stop_distances_by_walk.txt");
+                if walk_file_path.exists() {
+                    self.parse_walk_paths(walk_file_path.as_os_str().to_str().unwrap());
+                    return;
+                }
+            }
+        }
+    }
+    // TODO: how to fix this; every stop real stop should be associated with the nearest point in the list, if it is within 30 meters.
+    fn parse_walk_paths(&mut self, path: &str) {
+        let raw_content = read_file(Path::new(&path));
+        let content = std::str::from_utf8(&raw_content).unwrap();
+        let mut lines = content.split('\n');
+
+        /*
+         *  Top: number of stops and number of near stops for each stop
+         */
+        let top: Vec<&str> = lines.next().unwrap().split(';').collect();
+        let stops_number = top[0].parse::<usize>().unwrap();
+        //let adj_stops_number = top[1].parse::<usize>().unwrap();
+
+        /*
+         *  List of points. :lat;lng"
+         */
+        let stop_positions = (0..stops_number)
+            .map(|_| lines.next().unwrap())
+            .map(|l| l.split(';').collect())
+            .map(|v: Vec<&str>| LatLng {
+                lat: v[0].parse::<f64>().unwrap(),
+                lng: v[1].parse::<f64>().unwrap(),
+            })
+            .collect::<Vec<LatLng>>();
+
+        // For each point, let's get the nearest stop id
+        // Then, stop_mappings[i] -> stop_id associated to the i-th point.
+        let stop_mappings: Vec<usize> = stop_positions.iter().map(|p| {
+            *self.dataset.get_near_stops(p, 1).first().unwrap()
+        }).collect();
+
+        let walking_result = (0..stops_number)
+            .map(|_| lines.next().unwrap())
+            .map(|l|
+                l.split(' ')
+                    .filter(|s| !s.is_empty())
+                    .map(|s| s.parse::<usize>().unwrap())
+                    .collect())
+            .map(|v: Vec<usize>| {
+                StopWalkTime {
+                    stop_id: stop_mappings[v[0] - 1],
+                    near_stops: v.iter().skip(1).step_by(2).zip(
+                        v.iter().skip(2).step_by(2))
+                        .map(|(&stop, &distance)| {
+                            StopDistance {
+                                stop_id: stop_mappings[stop - 1],
+                                distance_meters: distance,
+                            }
+                        }).collect(),
+                }
+            })
+            .collect::<Vec<StopWalkTime>>();
+
+        println!("Size of walking results: {}", walking_result.len());
+        self.dataset.walk_times = vec![];
+        for stop in &self.dataset.stops {
+            let (inx_nearest, dist_meters) = nearest_point(&stop.stop_pos, &stop_positions);
+            if dist_meters > 30.0 {
+                println!("Skipping for distance: {}", dist_meters);
+                self.dataset.walk_times.push(StopWalkTime {
+                    stop_id: stop.stop_id,
+                    ..Default::default()
+                });
+            } else {
+                self.dataset.walk_times.push(StopWalkTime {
+                    stop_id: stop.stop_id,
+                    ..walking_result[inx_nearest].clone()
+                });
+            }
+        }
+    }
+}
+
+/// return the index in points of the nearest point to target
+    /// (index,distance)
+fn nearest_point(target: &LatLng, points: &Vec<LatLng>) -> (usize, f64) {
+    let coord = target.as_point();
+    points
+        .iter()
+        .enumerate()
+        .min_by_key(|(i, pos)|
+            (pos.as_point().geodesic_distance(&coord) * 100000.0) as i64)
+        .map(|(i, pos)| (i, pos.as_point().geodesic_distance(&coord)))
+        .unwrap()
 }

@@ -26,9 +26,10 @@ pub struct GtfsData {
     pub shapes: Vec<Shape>,
     pub stops: Vec<Stop>,
     pub services: Vec<Service>,
-
     pub stop_times: Vec<StopTimes>,
-    //pub agencies: Vec<Agency>,
+
+    pub walk_times: Vec<StopWalkTime>,
+//pub agencies: Vec<Agency>,
 }
 
 impl GtfsData {
@@ -327,4 +328,16 @@ impl LatLng {
             y: self.lng,
         }.into()
     }
+}
+
+#[derive(Debug, Default, Serialize, Deserialize,Clone)]
+pub struct StopWalkTime {
+    pub stop_id: usize,
+    pub near_stops: Vec<StopDistance>
+}
+
+#[derive(Debug, Default, Serialize, Deserialize,Clone)]
+pub struct StopDistance {
+    pub stop_id: usize,
+    pub distance_meters: usize,
 }

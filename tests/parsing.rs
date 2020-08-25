@@ -118,3 +118,20 @@ fn test_vector_equality() {
     map.insert(v1, 1);
     assert_eq!(*(map.get(&v2).unwrap()), 1 as usize);
 }
+
+#[test]
+fn test_walk_distance() {
+    let ds = make_dataset();
+    assert_eq!(ds.walk_times.len(), ds.stops.len());
+    assert_eq!(ds.stops[10].stop_id, ds.walk_times[10].stop_id);
+
+    let without = ds.walk_times
+        .iter().filter(|i| i.near_stops.is_empty()).count();
+    assert!(without < (ds.stops.len() as f64 * 0.01) as usize, format!("number of stops without near data: {} out of {}",without,ds.stops.len()));
+
+    for i in ds.walk_times {
+        if !i.near_stops.is_empty() {
+            assert_eq!(i.near_stops[0].stop_id, i.stop_id)
+        }
+    }
+}
