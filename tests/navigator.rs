@@ -6,7 +6,7 @@ use chrono::NaiveDate;
 use fastgtfs::gtfs_data::GtfsTime;
 
 fn default_start_time() -> GtfsTime {
-    let start_timestamp = NaiveDate::from_ymd(2020, 07, 25).and_hms(17, 33, 44).timestamp();
+    let start_timestamp = NaiveDate::from_ymd(2020, 08, 30).and_hms(17, 33, 44).timestamp();
     GtfsTime::new_from_timestamp(start_timestamp)
 }
 
@@ -58,11 +58,14 @@ mod tests {
                 max_changes: 3,
                 start_time: default_start_time(),
             };
-            navigator.find_path(params);
+            navigator.find_path_multiple(params);
         });
 
+        let mut sol_cnt = 0;
         for sol in rx {
+            sol_cnt += 1;
             debug!("A SOLUTION HAS BEEN RECEIVED! {}", sol);
         }
+        assert_ne!(sol_cnt, 0);
     }
 }

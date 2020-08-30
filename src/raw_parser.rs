@@ -1,15 +1,15 @@
-use std::collections::HashMap;
+use std::collections::{BTreeSet, HashMap, HashSet};
 use std::fs;
 use std::fs::File;
 use std::io::Read;
 use std::path::Path;
 use std::time::Instant;
 
-use geo::algorithm::euclidean_distance::EuclideanDistance;
 use geo::algorithm::geodesic_distance::GeodesicDistance;
 use itertools::Itertools;
 use rayon::iter::{IntoParallelIterator, IntoParallelRefIterator};
 use rayon::iter::ParallelIterator;
+use log::{error};
 
 use crate::gtfs_data::{GtfsData, GtfsTime, LatLng, Route, Service, ServiceException, Shape, Stop, StopDistance, StopTime, StopTimes, StopWalkTime, to_coordinates, Trip};
 use crate::raw_models::{parse_gtfs, RawRoute, RawService, RawServiceException, RawShape, RawStop, RawStopTime, RawTrip};
@@ -42,7 +42,7 @@ struct StopTimeInConstruction {
 }
 
 // 05:00:00
-fn str_time_to_seconds(s: &str) -> i64 {
+pub fn str_time_to_seconds(s: &str) -> i64 {
     let sp: Vec<i64> = s.split(':').map(|s| s.parse::<i64>().unwrap()).collect();
     let (h, m, s) = (sp[0], sp[1], sp[2]);
     s + m * 60 + h * 60 * 60
@@ -179,6 +179,7 @@ impl RawParser {
         self.parse_services(path);
         self.parse_trips(path);
         self.parse_stop_times(path);
+        self.assign_stop_times_to_routes();
         self.assign_routes_to_stops();
     }
 
@@ -314,6 +315,22 @@ impl RawParser {
                 trip.start_time = st.start_time;
             });
     }
+    fn assign_stop_times_to_routes(&mut self) {
+        let ds = &mut self.dataset;
+
+        let routes_stop_times: Vec<BTreeSet<usize>> = ds.routes.par_iter().map(|r|
+            r.trips
+                .iter()
+                .map(|trip_id| ds.get_trip(*trip_id).stop_times_id)
+                .collect()
+        ).collect();
+
+        ds.routes.iter_mut().zip(routes_stop_times.into_iter())
+            .for_each(|(route, stop_times)| {
+                route.stop_times = stop_times;
+            });
+    }
+
 
     fn create_stop_times(
         &self,
@@ -417,6 +434,7 @@ impl RawParser {
             route_short_name: route.route_short_name,
             route_long_name: route.route_long_name,
             trips: vec![],
+            stop_times: Default::default(),
             dataset_index: 0,
         })
     }
@@ -435,7 +453,7 @@ impl RawParser {
                 vec![]
             });
 
-        for service in raw_services {
+        for service in &raw_services {
             let this_exceptions = raw_services_exceptions
                 .iter()
                 .filter(|e| e.service_id == service.service_id)
@@ -444,9 +462,29 @@ impl RawParser {
 
             self.add_service(service, this_exceptions);
         }
+        // Add remaining exceptions without a service in calendar.txt
+
+        let service_ids = raw_services.iter().map(|s| s.service_id.clone()).collect::<HashSet<String>>();
+        for exception in raw_services_exceptions {
+            if service_ids.contains(&exception.service_id) {
+                continue;
+            }
+            self.add_service(&RawService{
+                service_id: exception.service_id.clone(),
+                monday: "0".to_string(),
+                tuesday: "0".to_string(),
+                wednesday: "0".to_string(),
+                thursday: "0".to_string(),
+                friday: "0".to_string(),
+                saturday: "0".to_string(),
+                sunday: "0".to_string(),
+                start_date: "19700101".to_string(),
+                end_date: "19700101".to_string()
+            }, vec![exception]);
+        }
     }
 
-    fn add_service(&mut self, service: RawService, exceptions: Vec<RawServiceException>) {
+    fn add_service(&mut self, service: &RawService, exceptions: Vec<RawServiceException>) {
         let number_of_services = self.dataset.services.len();
         self.service_name_to_inx
             .insert(service.service_id.clone(), number_of_services);
@@ -478,14 +516,17 @@ impl RawParser {
 
     fn add_trip(&mut self, trip: RawTrip) {
         let number_of_trips = self.dataset.trips.len();
-        self.trip_name_to_inx.insert(trip.trip_id, number_of_trips);
+        self.trip_name_to_inx.insert(trip.trip_id.clone(), number_of_trips);
         let trip_id = number_of_trips;
         let route_id = *self.routes_name_to_inx.get(&trip.route_id).unwrap();
         let shape_id = *self.shape_name_to_inx.get(&trip.shape_id).unwrap();
         let service_id_val = self.service_name_to_inx.get(&trip.service_id);
         let service_id: Option<usize> = if let Some(s_id) = service_id_val {
             Some(*s_id)
-        } else { None };
+        } else {
+            error!("Shape id not found: {}, trip: {:?}",trip.service_id, trip);
+            None
+        };
 
         self.dataset.trips.push(Trip {
             route_id,
@@ -574,8 +615,7 @@ impl RawParser {
         self.dataset.walk_times = vec![];
         for stop in &self.dataset.stops {
             let (inx_nearest, dist_meters) = nearest_point(&stop.stop_pos, &stop_positions);
-            if dist_meters > 30.0 {
-                println!("Skipping for distance: {}", dist_meters);
+            if dist_meters > 100.0 {
                 self.dataset.walk_times.push(StopWalkTime {
                     stop_id: stop.stop_id,
                     ..Default::default()
@@ -597,7 +637,7 @@ fn nearest_point(target: &LatLng, points: &Vec<LatLng>) -> (usize, f64) {
     points
         .iter()
         .enumerate()
-        .min_by_key(|(i, pos)|
+        .min_by_key(|(_, pos)|
             (pos.as_point().geodesic_distance(&coord) * 100000.0) as i64)
         .map(|(i, pos)| (i, pos.as_point().geodesic_distance(&coord)))
         .unwrap()

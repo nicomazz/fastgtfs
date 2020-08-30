@@ -11,7 +11,7 @@ pub struct NavigationParams {
     //pub sol_callback: Box<dyn Fn(Solution)>,
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct Solution {
     pub start_time: GtfsTime,
     pub duration_seconds: usize,
@@ -61,7 +61,7 @@ impl Solution {
 }
 
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum SolutionComponent {
     Walk(WalkSolutionComponent),
     Bus(BusSolutionComponent),
@@ -80,7 +80,7 @@ impl fmt::Display for SolutionComponent {
     }
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct BusSolutionComponent {
     pub route: Route,
     pub trip: Trip,
@@ -89,7 +89,7 @@ pub struct BusSolutionComponent {
     pub to_inx: Option<usize>,
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct WalkSolutionComponent {
     pub stop_id: usize,
 }
