@@ -1,6 +1,5 @@
 use std::cmp::{max, min};
 use std::collections::{BTreeMap, HashMap, HashSet};
-use std::convert::TryInto;
 use std::sync::mpsc::Sender;
 use std::time::Instant;
 
@@ -58,6 +57,7 @@ pub struct RaptorNavigator<'a> {
 
     on_solution_found: Sender<Solution>,
 
+    active_trips: HashMap<usize,Vec<usize>>, // v[route_id] -> trips active in the searched date
 }
 
 /// This is used to walk between stops when we change bus
@@ -101,6 +101,7 @@ impl<'a> RaptorNavigator<'a> {
             best_destination_time: GtfsTime::new_infinite(),
             on_solution_found,
             banned_trip_ids: Default::default(),
+            active_trips: Default::default()
         }
     }
 
@@ -220,7 +221,6 @@ impl<'a> RaptorNavigator<'a> {
         let stop_times = &self.dataset.get_route_stop_times(route_id).first().unwrap().stop_times;
         //trace!("considering route {} start_stop_inx {}/{}", route.route_long_name, start_stop_inx, stop_times.len());
         let mut start_stop_id = stop_times[start_stop_inx].stop_id;
-        let base_time = &self.navigation_params.start_time;
 
         // There might be multiple stops in this trip where we can go up. We take the onw that 
         // maximizes the waiting between precedent and next bus change.
@@ -369,7 +369,7 @@ impl<'a> RaptorNavigator<'a> {
 
             for sd in near_stops_with_distance {
                 let to_stop_id = sd.stop_id;
-                let to_stop = self.dataset.get_stop(to_stop_id);
+                let _to_stop = self.dataset.get_stop(to_stop_id);
                 let cost = self.seconds_by_walk(sd.distance_meters);
                 let mut after_walk_time = original_best_times.get(&from_stop.stop_id).unwrap_or(&GtfsTime::new_infinite()).clone();
                 after_walk_time.add_seconds(cost);

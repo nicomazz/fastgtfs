@@ -20,7 +20,7 @@ mod tests {
 
     use fastgtfs::gtfs_data::LatLng;
     use fastgtfs::navigator::RaptorNavigator;
-    use fastgtfs::navigator_models::{NavigationParams, Solution};
+    use fastgtfs::navigator_models::{NavigationParams, Solution, SolutionComponent};
     use fastgtfs::raw_parser::RawParser;
     use fastgtfs::test_utils::get_test_paths;
 
@@ -65,8 +65,12 @@ mod tests {
         let mut sol_cnt = 0;
         for sol in rx {
             sol_cnt += 1;
-            for component in sol.components {
-// todo verify that the times are not overlapping or going back in time
+            let mut last_time = default_start_time();
+            for component in &sol.components {
+                if let SolutionComponent::Bus(b) = component {
+                 // todo uncomment   assert!(last_time <= b.departure_time());
+                    last_time = b.arrival_time();
+                }
             }
             debug!("A SOLUTION HAS BEEN RECEIVED! {}", sol);
         }

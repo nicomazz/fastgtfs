@@ -81,9 +81,9 @@ impl fmt::Display for SolutionComponent {
                          b.route.route_short_name,
                          b.trip.trip_id,
                          b.from_inx.unwrap(),
-                         b.from_time(),
+                         b.departure_time(),
                          b.to_inx.unwrap(),
-                         b.to_time())
+                         b.arrival_time())
             }
         }
     }
@@ -100,11 +100,11 @@ pub struct BusSolutionComponent {
 }
 
 impl BusSolutionComponent {
-    fn from_time(&self) -> GtfsTime {
+    pub fn departure_time(&self) -> GtfsTime {
         GtfsTime::new_from_midnight(self.trip.start_time + self.path.stop_times[self.from_inx.unwrap()].time)
     }
 
-    fn to_time(&self) -> GtfsTime {
+    pub fn arrival_time(&self) -> GtfsTime {
         GtfsTime::new_from_midnight(self.trip.start_time + self.path.stop_times[self.to_inx.unwrap()].time)
     }
 }
