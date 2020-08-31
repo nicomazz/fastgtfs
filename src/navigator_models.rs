@@ -112,3 +112,11 @@ impl BusSolutionComponent {
 pub struct WalkSolutionComponent {
     pub stop_id: usize,
 }
+
+type StopId = usize;
+
+pub struct WalkingPathUpdate {
+    pub from_stop_id : StopId,
+    pub to_stop_id: StopId,
+    pub cost : u64,
+}

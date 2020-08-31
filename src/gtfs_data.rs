@@ -16,6 +16,7 @@ use geo::algorithm::euclidean_distance::EuclideanDistance;
 use geo::algorithm::geodesic_distance::GeodesicDistance;
 use itertools::Itertools;
 use log::error;
+use log::trace;
 use serde::{Deserialize, Serialize};
 
 use self::serde::export::Formatter;
@@ -63,12 +64,16 @@ impl GtfsData {
         let route = self.get_route(route_id);
         route.stop_times.iter().map(|&st| self.get_stop_times(st)).collect()
     }
-    /// returns the first trip that has `stop` (with inx after `start_stop_inx`) after time (not in excluded_trips)
-    pub fn trip_after_time(&self, route_id: usize, stop_id: usize, min_time: &GtfsTime, start_stop_inx: usize, banned_trip_ids: &HashSet<usize>) -> Option<(&Trip, usize)> {
-        let route = self.get_route(route_id);
-        let trips = &route.trips;
 
-        let stop_times = &self.get_route_stop_times(route_id).first().unwrap().stop_times;
+    /// returns the first trip that has `stop` (with inx after `start_stop_inx`) after time (not in excluded_trips)
+    /// We make the `almost right` assumption that all the trips are from the same route id, and that they all share the same stop_time.
+    /// This is true most of the times.
+    /// TODO: handle this correctly
+    pub fn trip_after_time(&self, trips: &Vec<usize>, stop_id: usize, min_time: &GtfsTime, start_stop_inx: usize, banned_trip_ids: &HashSet<usize>) -> Option<(&Trip, usize)> {
+        if trips.is_empty() { return None; }
+
+        let first_trip = self.get_trip(*trips.first().unwrap());
+        let stop_times = &self.get_stop_times(first_trip.stop_times_id).stop_times;
         let trips_duration = stop_times.last().unwrap().time;
 
         // indexes of the stops in `stop_times` matching `stop_id`
@@ -83,7 +88,7 @@ impl GtfsData {
         trips.iter()
             .filter(|t_id| !banned_trip_ids.contains(t_id))
             .map(|t_id| self.get_trip(*t_id))
-            .filter(|t| self.trip_active_on_day(t, min_time))
+            .filter(|t| self.trip_active_on_time(t, min_time, None))
             .filter(|trip| trip.start_time + trips_duration >= min_time.since_midnight() as i64)
             .find_map(|trip| { // this returns the first for which the content is an Ok result
                 inxes_for_stop
@@ -116,28 +121,61 @@ impl GtfsData {
         near_stops(pos, number, &self.stops)
     }
 
-    pub fn trip_id_active_on_day(&self, trip_id: usize, day: &GtfsTime) -> bool {
+    pub fn trip_id_active_on_time(&self, trip_id: usize, day: &GtfsTime, within_hours: Option<i64>) -> bool {
         let trip = self.get_trip(trip_id);
-        self.trip_active_on_day(trip,day)
+        self.trip_active_on_time(trip, day, within_hours)
     }
-    pub fn trip_active_on_day(&self, trip: &Trip, day: &GtfsTime) -> bool {
+
+    /// returns the number of seconds since midnight this trip departs and arrive
+    fn get_trip_departure_arrival_times(&self, trip: &Trip) -> (i64, i64) {
+        let stop_times = self.get_stop_times(trip.stop_times_id);
+        let trip_duration = stop_times.stop_times.last().unwrap().time;
+        (trip.start_time, trip.start_time + trip_duration)
+    }
+    /// returns true if this trip goes within `[time, time + within_hours]`,
+    /// taking care of the service and its exceptions
+    pub fn trip_active_on_time(&self, trip: &Trip, time: &GtfsTime, within_hours: Option<i64>) -> bool {
         if trip.service_id.is_none() {
             error!("Trip without service id! {}", trip.trip_short_name);
             return true;
         }
+        let seconds_in_h = 60 * 60;
+        let within_seconds = within_hours.unwrap_or(24) * seconds_in_h;
+        let target_time = time.since_midnight() as i64;
+
+        // It starts afterwards our window.
+        if trip.start_time > target_time + within_seconds {
+            return false;
+        }
+        let (_, arrival_time) = self.get_trip_departure_arrival_times(trip);
+        // It finishes before our window
+        if arrival_time < target_time {
+            return false;
+        }
+
         let service = self.get_service(trip.service_id.unwrap());
 
         for exception in &service.exceptions {
-            if exception.date.is_same_day(&day) {
+            if exception.date.is_same_day(&time) {
                 return exception.running;
             }
         }
-        service.days[day.day_of_week() as usize]
+        service.days[time.day_of_week() as usize]
     }
 
     pub fn route_active_on_day(&self, route_id: usize, day: &GtfsTime) -> bool {
         let route = self.get_route(route_id);
-        route.trips.iter().any(|&t| self.trip_id_active_on_day(t, &day))
+        route.trips.iter().any(|&t| self.trip_id_active_on_time(t, &day, None))
+    }
+
+    pub fn trips_active_on_date_within_hours(&self, route_id: usize, time: &GtfsTime, within_h: i64) -> Vec<usize> {
+        let route = self.get_route(route_id);
+        route.trips
+            .iter()
+            .filter(|&&t|
+                self.trip_id_active_on_time(t, time, Some(within_h)))
+            .cloned()
+            .collect::<Vec<usize>>()
     }
 }
 
@@ -168,6 +206,7 @@ pub struct StopTime {
     pub stop_id: usize,
     pub time: i64, // in seconds
 }
+
 impl StopTime {
     pub fn real_time(&self, trip_start_time: i64) -> i64 {
         self.time + trip_start_time
@@ -365,6 +404,9 @@ impl LatLng {
             x: self.lat,
             y: self.lng,
         }.into()
+    }
+    pub fn distance_meters(&self, other: &LatLng) -> u64 {
+        self.as_point().geodesic_distance(&other.as_point()) as u64
     }
 }
 

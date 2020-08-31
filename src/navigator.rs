@@ -6,9 +6,10 @@ use std::time::Instant;
 use geo::algorithm::geodesic_distance::GeodesicDistance;
 use itertools::Itertools;
 use log::{debug, error, trace};
+use rayon::iter::{IntoParallelIterator, IntoParallelRefIterator, ParallelIterator};
 
-use crate::gtfs_data::{GtfsData, GtfsTime, LatLng, Stop, StopDistance, Trip};
-use crate::navigator_models::{NavigationParams, Solution};
+use crate::gtfs_data::{GtfsData, GtfsTime, LatLng, Route, Stop, StopDistance, Trip};
+use crate::navigator_models::{NavigationParams, Solution, WalkingPathUpdate};
 use crate::navigator_models::SolutionComponent::Bus;
 
 #[derive(Debug)]
@@ -20,8 +21,9 @@ pub struct RaptorNavigator<'a> {
     stops_near_destination_map: HashSet<usize>,
     stops_near_destination_list: Vec<usize>,
 
-    // routes that have trips active today. This speeds up things by skipping rotues.
-    routes_active_this_day: HashSet<usize>,
+    // trips active today. This speeds up things by skipping the many trips that are not useful.
+    active_trips: HashMap<usize, Vec<usize>>, // v[route_id] -> trips active in the searched date
+
 
     navigation_params: NavigationParams,
 
@@ -57,7 +59,6 @@ pub struct RaptorNavigator<'a> {
 
     on_solution_found: Sender<Solution>,
 
-    active_trips: HashMap<usize,Vec<usize>>, // v[route_id] -> trips active in the searched date
 }
 
 /// This is used to walk between stops when we change bus
@@ -89,7 +90,6 @@ impl<'a> RaptorNavigator<'a> {
             end_stop: Default::default(),
             stops_near_destination_list: Default::default(),
             stops_near_destination_map: Default::default(),
-            routes_active_this_day: Default::default(),
             navigation_params: Default::default(),
             t: Default::default(),
             tbest: Default::default(),
@@ -101,7 +101,7 @@ impl<'a> RaptorNavigator<'a> {
             best_destination_time: GtfsTime::new_infinite(),
             on_solution_found,
             banned_trip_ids: Default::default(),
-            active_trips: Default::default()
+            active_trips: Default::default(),
         }
     }
 
@@ -111,7 +111,7 @@ impl<'a> RaptorNavigator<'a> {
 
         self.start_stop = self.dataset.find_nearest_stop(&params.from).clone();
         self.end_stop = self.dataset.find_nearest_stop(&params.to).clone();
-        self.compute_routes_active_today(&params.start_time);
+        self.compute_trips_active_today(&params.start_time);
         self.find_near_destination_stops(self.end_stop.stop_pos.clone());
     }
 
@@ -176,16 +176,41 @@ impl<'a> RaptorNavigator<'a> {
         }
     }
 
-    /// For each marked stop, tries to reach the new possible ones
-    fn build_route_stop(&mut self) -> BTreeMap<usize, usize> { // route_id -> stop_id
+    /// This makes a list of routes that pass trough each marked stops.
+    /// Those will be scanned later in handle_route_stop
+    fn build_route_stop(&mut self) -> BTreeMap<usize, usize> { // route_id -> stop_inx
         trace!("Building route stop");
-        let to_consider = self.marked_stops.iter()
+        let now = Instant::now();
+        let stops_to_consider = self.marked_stops.iter()
             .map(|&stop_id| self.dataset.get_stop(stop_id))
             .collect::<Vec<&Stop>>();
         let mut routes_to_consider = BTreeMap::<usize, usize>::new(); // route_id, inx of the stop
-        // TODO: make this concurrent
-        for stop in to_consider {
-            let routes = stop.routes.iter().map(|r_id| self.dataset.get_route(*r_id));
+       // todo fix this to make it parallel, but it might save only a very small number of ms
+        /* let all_route_stops = stops_to_consider.into_par_iter().flat_map(|stop| {
+            // Each stop is mapped in a list of (route, inx of stop inside route).
+            stop.routes
+                .iter()
+                .filter(|r_id| self.active_trips.contains_key(r_id))
+                .map(|r_id| self.dataset.get_route(*r_id))
+                .filter_map(|route| {
+                    let stop_inx = route.get_stop_inx(self.dataset, stop.stop_id);
+                    if stop_inx.is_none() {
+                        error!("Route {} doesn't contain stop {}. You should handle multiple stop times per route!", route.route_short_name, stop.stop_name);
+                        return None;
+                    }
+                    Some((route.route_id, stop_inx.unwrap()))
+                }).collect::<Vec::<(usize, usize)>>() // vec<(route_id, stop_inx)>
+        }).collect::<Vec<(usize, usize)>>();
+
+        for (route_id, stop_inx) in all_route_stops {
+            let prec_inx = routes_to_consider.entry(route_id).or_insert_with(|| stop_inx);
+            * prec_inx = min( * prec_inx, stop_inx);
+        }*/
+        for stop in stops_to_consider {
+            let routes = stop.routes
+                .iter()
+                .filter(|r_id| self.active_trips.contains_key(r_id))
+                .map(|r_id| self.dataset.get_route(*r_id));
             for route in routes {
                 let stop_inx = route.get_stop_inx(self.dataset, stop.stop_id);
                 if stop_inx.is_none() {
@@ -197,7 +222,8 @@ impl<'a> RaptorNavigator<'a> {
             }
         }
         self.marked_stops.clear();
-        trace!("route stops to consider now: {}", routes_to_consider.len());
+        trace!("route stops to consider now: {} in {}", routes_to_consider.len(), now.elapsed().as_millis());
+
         routes_to_consider
     }
     /*
@@ -214,9 +240,6 @@ impl<'a> RaptorNavigator<'a> {
         fn consider_route(&self, _stop: &Stop, _route: &Route) {}*/
 
     fn handle_route_stop(&mut self, route_id: usize, start_stop_inx: usize, hop_att: u8) { // returns new best solutions
-        if !self.routes_active_this_day.contains(&route_id) {
-            return;
-        }
         let _route = self.dataset.get_route(route_id);
         let stop_times = &self.dataset.get_route_stop_times(route_id).first().unwrap().stop_times;
         //trace!("considering route {} start_stop_inx {}/{}", route.route_long_name, start_stop_inx, stop_times.len());
@@ -241,7 +264,7 @@ impl<'a> RaptorNavigator<'a> {
             if let Some(trip_id) = trip {
                 let this_trip = self.dataset.get_trip(trip_id);
                 let prec_best = self.tbest.entry(stop_id).or_insert_with(GtfsTime::new_infinite).clone();
-                time_at_stop = self.new_time( stop_time.real_time(this_trip.start_time));
+                time_at_stop = self.new_time(stop_time.real_time(this_trip.start_time));
 
                 if self.only_best && self.best_destination_time < time_at_stop {
                     //  debug!("Can't improve current best");
@@ -269,8 +292,13 @@ impl<'a> RaptorNavigator<'a> {
             //  trace!("prec time in stop {:?}, att_time_at_stop {:?}", prec_time_in_stop, time_at_stop);
             // we either don't have a trip already, or with other solutions we arrive there earlier
             if trip.is_none() || prec_time_in_stop <= time_at_stop {
+                // This route doesn't have active trips
+                if !self.active_trips.contains_key(&route_id) { continue; }
                 let new_trip: Option<(&Trip, usize)> = self.dataset.trip_after_time(
-                    route_id, stop_id, &prec_time_in_stop, att_stop_inx, &self.banned_trip_ids); // todo use excluded trips
+                    self.active_trips.get(&route_id).unwrap(),
+                    stop_id,
+                    &prec_time_in_stop,
+                    att_stop_inx, &self.banned_trip_ids); // todo use excluded trips
 
                 if new_trip.is_none() {
                     //debug!("No trips available");
@@ -278,11 +306,11 @@ impl<'a> RaptorNavigator<'a> {
                 }
 
                 let (new_trip, trip_stop_inx) = new_trip.unwrap();
-                if self.banned_trip_ids.contains(&new_trip.trip_id){
+                if self.banned_trip_ids.contains(&new_trip.trip_id) {
                     panic!("Returned a trip in the banned list!!!");
                 }
                 let trip_stop_inx = max(att_stop_inx, trip_stop_inx);
-                let arriving_time_with_new_trip = 
+                let arriving_time_with_new_trip =
                     self.new_time(new_trip.start_time + stop_times[trip_stop_inx].time);
                 let arriving_time_with_old_trip = if trip.is_none() { GtfsTime::new_infinite() } else {
                     self.new_time(self.dataset.get_trip(trip.unwrap()).start_time + stop_times[att_stop_inx].time) // this is a bit wrong, we should consider the index of the old trip
@@ -295,13 +323,13 @@ impl<'a> RaptorNavigator<'a> {
                     //  debug!("Setting new trip!");
                     trip = Some(new_trip.trip_id);
                     _att_stop_inx = trip_stop_inx;
-                    
+
                     time_delta_change = arriving_time_with_new_trip.distance(&prec_time_in_stop);
                 } else if new_trip.trip_id == trip.unwrap() {
                     // This is the same trip, but maybe it is better to take it at this stop?
                     // It all depends on the delta between the precedent arrival at this stop, 
                     // and when this trip passes there
-                    let att_delay =  arriving_time_with_new_trip.distance(&prec_time_in_stop);
+                    let att_delay = arriving_time_with_new_trip.distance(&prec_time_in_stop);
                     if att_delay > time_delta_change {
                         time_delta_change = att_delay;
                         start_stop_id = att_stop_inx;
@@ -334,64 +362,71 @@ impl<'a> RaptorNavigator<'a> {
         }
     }
 
-    fn seconds_by_walk(&self, meters: usize) -> u64 {
+    fn seconds_by_walk(meters: usize) -> u64 {
         let walk_speed_kmph = 4;
         let walk_speed_meters_per_minute = walk_speed_kmph * 100 / 6; // da km all'ora ci prendiamo metri per minuto (per far prima
         (meters * 60 / walk_speed_meters_per_minute) as u64
     }
-    fn lat_lng_dist(&self, from: &LatLng, to: &LatLng) -> u64 {
-        from.as_point().geodesic_distance(&to.as_point()) as u64
-    }
     /// Let's add the near stop to each one marked
     fn add_walking_path(&mut self, hop_att: u8) {
-        // TODO do benchmark  this, it might be very, very expensive!
         trace!("Adding walking paths. Initial number of marked stops: {}", self.marked_stops.len());
         let now = Instant::now();
         let original_best_times = self.tbest.clone();
+        let ds = &self.dataset;
 
-        for from_stop_id in self.marked_stops.clone() {
-            let from_stop = self.dataset.get_stop(from_stop_id);
+        let updates_to_do = self.marked_stops
+            .clone()
+            .into_par_iter()
+            .flat_map(|from_stop_id| {
+                let from_stop = ds.get_stop(from_stop_id);
+                let near_walkable_stops = ds.get_near_stops_by_walk(from_stop.stop_id);
+                let near_stops_with_distance: Vec<StopDistance> =
+                    // todo calculate again walk distances
+                    // if near_walkable_stops.near_stops.is_empty() {
+                    if true {
+                        ds.get_near_stops(&from_stop.stop_pos, NEAR_STOP_NUMBER)
+                            .iter().map(|&s| ds.get_stop(s))
+                            .map(|to| StopDistance {
+                                stop_id: to.stop_id,
+                                distance_meters: from_stop.stop_pos.distance_meters(&to.stop_pos) as usize,
+                            }).collect()
+                    } else {
+                        near_walkable_stops.near_stops.clone()
+                    };
 
-            let near_walkable_stops = self.dataset.get_near_stops_by_walk(from_stop_id);
-            let near_stops_with_distance: Vec<StopDistance> =
-               // if near_walkable_stops.near_stops.is_empty() {
-                if true {
-                    self.dataset
-                        .get_near_stops(&from_stop.stop_pos, NEAR_STOP_NUMBER)
-                        .iter().map(|&s| self.dataset.get_stop(s))
-                        .map(|to| StopDistance {
-                            stop_id: to.stop_id,
-                            distance_meters: self.lat_lng_dist(&from_stop.stop_pos, &to.stop_pos) as usize,
-                        }).collect()
-                } else {
-                    near_walkable_stops.near_stops.clone()
-                };
+                near_stops_with_distance.into_iter().map(|sd|{
+                    let to_stop_id = sd.stop_id;
+                    let _to_stop = ds.get_stop(to_stop_id);
+                    let cost = RaptorNavigator::seconds_by_walk(sd.distance_meters);
 
-            for sd in near_stops_with_distance {
-                let to_stop_id = sd.stop_id;
-                let _to_stop = self.dataset.get_stop(to_stop_id);
-                let cost = self.seconds_by_walk(sd.distance_meters);
-                let mut after_walk_time = original_best_times.get(&from_stop.stop_id).unwrap_or(&GtfsTime::new_infinite()).clone();
-                after_walk_time.add_seconds(cost);
+                    WalkingPathUpdate {
+                        from_stop_id: from_stop.stop_id,
+                        to_stop_id,
+                        cost
+                    }
+                }).collect_vec()
+        }).collect::<Vec<WalkingPathUpdate>>();
 
-                if self.only_best && self.best_destination_time < after_walk_time {
-                    continue;
-                }
-                let old_near_stop_time = self.t.entry((to_stop_id, hop_att)).or_insert_with(GtfsTime::new_infinite);
-                if after_walk_time < *old_near_stop_time {
-                    self.update_best(to_stop_id, hop_att, after_walk_time);
-                    self.p.insert((to_stop_id, hop_att), BacktrackingInfo {
-                        trip_id: None,
-                        route_id: None,
-                        stop_id: from_stop.stop_id,
-                        start_stop_inx: 0,
-                        end_index: 0,
-                    });
-                    self.marked_stops.push(to_stop_id);
-                }
+        for update in updates_to_do {
+            let WalkingPathUpdate { from_stop_id, to_stop_id, cost } = update;
+
+            let mut after_walk_time = original_best_times.get(&from_stop_id).unwrap_or(&GtfsTime::new_infinite()).clone();
+            after_walk_time.add_seconds(cost);
+
+            if self.only_best && self.best_destination_time < after_walk_time {
+                continue;
             }
-            if !self.only_best {
-                self.check_for_solution(hop_att);
+            let old_near_stop_time = self.t.entry((to_stop_id, hop_att)).or_insert_with(GtfsTime::new_infinite);
+            if after_walk_time < *old_near_stop_time {
+                self.update_best(to_stop_id, hop_att, after_walk_time);
+                self.p.insert((to_stop_id, hop_att), BacktrackingInfo {
+                    trip_id: None,
+                    route_id: None,
+                    stop_id: from_stop_id,
+                    start_stop_inx: 0,
+                    end_index: 0,
+                });
+                self.marked_stops.push(to_stop_id);
             }
         }
         self.marked_stops = self.marked_stops.clone().into_iter().unique().collect();
@@ -469,13 +504,16 @@ impl<'a> RaptorNavigator<'a> {
             }
         }
     }
-    fn compute_routes_active_today(&mut self, time: &GtfsTime) {
-        self.routes_active_this_day = self.dataset.routes
-            .iter()
-            .map(|r| r.route_id)
-            .filter(|&r| self.dataset.route_active_on_day(r, time))
+    fn compute_trips_active_today(&mut self, time: &GtfsTime) {
+        let now = Instant::now();
+        let &ds = &self.dataset;
+        self.active_trips = self.dataset.routes
+            .par_iter()
+            .map(|r| (r.route_id, ds.trips_active_on_date_within_hours(r.route_id, &time, 4)))
+            .filter(|(_, v)| !v.is_empty())
             .collect();
-        debug!("routes active today: {}/{}", self.routes_active_this_day.len(), self.dataset.routes.len());
+
+        debug!("routes active today: {}/{}. calculated in: {}", self.active_trips.len(), self.dataset.routes.len(), now.elapsed().as_millis());
     }
 }
 
