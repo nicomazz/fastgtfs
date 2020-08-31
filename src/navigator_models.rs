@@ -1,6 +1,6 @@
 use std::fmt;
 
-use crate::gtfs_data::{GtfsTime, LatLng, Route, Trip};
+use crate::gtfs_data::{GtfsTime, LatLng, Route, StopTimes, Trip};
 
 #[derive(Debug, Clone, Default)]
 pub struct NavigationParams {
@@ -8,6 +8,7 @@ pub struct NavigationParams {
     pub to: LatLng,
     pub max_changes: u8,
     pub start_time: GtfsTime,
+    pub num_solutions_to_find: u8,
     //pub sol_callback: Box<dyn Fn(Solution)>,
 }
 
@@ -43,11 +44,12 @@ impl Solution {
         self.components.push(SolutionComponent::Walk(component));
     }
 
-    pub(crate) fn add_bus_path(&mut self, stop_id: usize, route: &Route, trip: &Trip, from_inx: usize,
+    pub(crate) fn add_bus_path(&mut self, stop_id: usize, route: &Route, trip: &Trip, path: &StopTimes, from_inx: usize,
                                to_inx: usize) {
         let component = BusSolutionComponent {
             route: route.clone(),
             trip: trip.clone(),
+            path: path.clone(),
             from_inx: Some(from_inx),
             to_inx: Some(to_inx),
         };
@@ -74,7 +76,14 @@ impl fmt::Display for SolutionComponent {
                 writeln!(f, "Walk path")
             }
             SolutionComponent::Bus(b) => {
-                writeln!(f, "Route {} from {} to {}", b.route.route_long_name, b.from_inx.unwrap(), b.to_inx.unwrap())
+                writeln!(f, "Route {} - {} trip {} from {} ({}) to {} ({})",
+                         b.route.route_long_name,
+                         b.route.route_short_name,
+                         b.trip.trip_id,
+                         b.from_inx.unwrap(),
+                         b.from_time(),
+                         b.to_inx.unwrap(),
+                         b.to_time())
             }
         }
     }
@@ -84,11 +93,21 @@ impl fmt::Display for SolutionComponent {
 pub struct BusSolutionComponent {
     pub route: Route,
     pub trip: Trip,
+    pub path: StopTimes,
     /// Within the trip path, `from` and `to` which index
     pub from_inx: Option<usize>,
     pub to_inx: Option<usize>,
 }
 
+impl BusSolutionComponent {
+    fn from_time(&self) -> GtfsTime {
+        GtfsTime::new_from_midnight(self.trip.start_time + self.path.stop_times[self.from_inx.unwrap()].time)
+    }
+
+    fn to_time(&self) -> GtfsTime {
+        GtfsTime::new_from_midnight(self.trip.start_time + self.path.stop_times[self.to_inx.unwrap()].time)
+    }
+}
 #[derive(Debug, Default, Clone)]
 pub struct WalkSolutionComponent {
     pub stop_id: usize,

@@ -1,5 +1,6 @@
 use std::cmp::{max, min};
 use std::collections::{BTreeMap, HashMap, HashSet};
+use std::convert::TryInto;
 use std::sync::mpsc::Sender;
 use std::time::Instant;
 
@@ -9,7 +10,6 @@ use log::{debug, error, trace};
 
 use crate::gtfs_data::{GtfsData, GtfsTime, LatLng, Stop, StopDistance, Trip};
 use crate::navigator_models::{NavigationParams, Solution};
-use std::convert::TryInto;
 use crate::navigator_models::SolutionComponent::Bus;
 
 #[derive(Debug)]
@@ -119,17 +119,12 @@ impl<'a> RaptorNavigator<'a> {
         self.tbest.clear();
         self.p.clear();
         self.marked_stops.clear();
-        self.routes_active_this_day.clear();
-        self.stops_near_destination_list.clear(); // TODO: should those be cleaned?
-        self.stops_near_destination_map.clear();
         self.best_stop = None;
         self.best_kth = None;
         self.best_destination_time = GtfsTime::new_infinite();
     }
 
-    fn clear_all(&mut self) {
-        self.clear_partial();
-    }
+
     pub fn find_near_destination_stops(&mut self, pos: LatLng) {
         self.stops_near_destination_list = self.dataset.get_stops_in_range(pos, 50.0);
         self.stops_near_destination_map = self.stops_near_destination_list.iter().copied().collect();
@@ -141,10 +136,11 @@ impl<'a> RaptorNavigator<'a> {
         let now = Instant::now();
         self.only_best = true;
 
-        for ith_navigation in 0..4 {
-            trace!("##### Starting {}-th navigation", ith_navigation);
-            self.clear_all();
-            self.init_navigation(&params);
+        self.init_navigation(&params);
+
+        for ith_navigation in 0..params.num_solutions_to_find {
+            trace!("##### Starting {}-th navigation with {} trips banned", ith_navigation, self.banned_trip_ids.len());
+            self.clear_partial();
             self.navigate();
             match self.best_stop {
                 Some(best_stop) => {
@@ -223,7 +219,12 @@ impl<'a> RaptorNavigator<'a> {
         let _route = self.dataset.get_route(route_id);
         let stop_times = &self.dataset.get_route_stop_times(route_id).first().unwrap().stop_times;
         //trace!("considering route {} start_stop_inx {}/{}", route.route_long_name, start_stop_inx, stop_times.len());
-        let start_stop_id = stop_times[start_stop_inx].stop_id;
+        let mut start_stop_id = stop_times[start_stop_inx].stop_id;
+        let base_time = &self.navigation_params.start_time;
+
+        // There might be multiple stops in this trip where we can go up. We take the onw that 
+        // maximizes the waiting between precedent and next bus change.
+        let mut time_delta_change = -1;
         //debug!("Considering route  {} {}", &_route.route_short_name, &_route.route_long_name);
         let mut trip: Option<usize> = None;
         let mut _att_stop_inx = start_stop_inx;
@@ -239,13 +240,13 @@ impl<'a> RaptorNavigator<'a> {
 
             if let Some(trip_id) = trip {
                 let this_trip = self.dataset.get_trip(trip_id);
-                let prec_best = self.tbest.entry(stop_id).or_insert_with(GtfsTime::new_infinite);
-                time_at_stop = GtfsTime::base_day_add_from_midnight(&self.navigation_params.start_time, stop_time.real_time(this_trip.start_time));
+                let prec_best = self.tbest.entry(stop_id).or_insert_with(GtfsTime::new_infinite).clone();
+                time_at_stop = self.new_time( stop_time.real_time(this_trip.start_time));
 
                 if self.only_best && self.best_destination_time < time_at_stop {
-                  //  debug!("Can't improve current best");
+                    //  debug!("Can't improve current best");
                     // this solution can't improve the best one
-                } else if time_at_stop < *prec_best {
+                } else if time_at_stop < prec_best {
                     // We improve this stop solution with this trip
                     self.update_best(curr_stop.stop_id, hop_att, time_at_stop.clone());
                     // let's save the parent for backtracking
@@ -256,20 +257,20 @@ impl<'a> RaptorNavigator<'a> {
                         start_stop_inx,
                         end_index: att_stop_inx,
                     });
-                   // debug!("Marking a new stop!");
+                    // debug!("Marking a new stop!");
                     self.marked_stops.push(curr_stop.stop_id);
                 } else {
                     // debug!("This doesn't improve anything. Time at stop: {}, prec_best: {}", time_at_stop, *prec_best);
                 }
             }
 
-            let prec_time_in_stop = self.t.entry((curr_stop.stop_id, hop_att - 1)).or_insert_with(GtfsTime::new_infinite);
+            let prec_time_in_stop = self.t.entry((curr_stop.stop_id, hop_att - 1)).or_insert_with(GtfsTime::new_infinite).clone();
 
             //  trace!("prec time in stop {:?}, att_time_at_stop {:?}", prec_time_in_stop, time_at_stop);
             // we either don't have a trip already, or with other solutions we arrive there earlier
-            if trip.is_none() || *prec_time_in_stop <= time_at_stop {
+            if trip.is_none() || prec_time_in_stop <= time_at_stop {
                 let new_trip: Option<(&Trip, usize)> = self.dataset.trip_after_time(
-                    route_id, stop_id, prec_time_in_stop, att_stop_inx, &self.banned_trip_ids); // todo use excluded trips
+                    route_id, stop_id, &prec_time_in_stop, att_stop_inx, &self.banned_trip_ids); // todo use excluded trips
 
                 if new_trip.is_none() {
                     //debug!("No trips available");
@@ -277,22 +278,34 @@ impl<'a> RaptorNavigator<'a> {
                 }
 
                 let (new_trip, trip_stop_inx) = new_trip.unwrap();
+                if self.banned_trip_ids.contains(&new_trip.trip_id){
+                    panic!("Returned a trip in the banned list!!!");
+                }
                 let trip_stop_inx = max(att_stop_inx, trip_stop_inx);
-                let arriving_time_with_new_trip = GtfsTime::new_from_midnight(new_trip.start_time + stop_times[trip_stop_inx].time);
+                let arriving_time_with_new_trip = 
+                    self.new_time(new_trip.start_time + stop_times[trip_stop_inx].time);
                 let arriving_time_with_old_trip = if trip.is_none() { GtfsTime::new_infinite() } else {
-                    GtfsTime::new_from_midnight(self.dataset.get_trip(trip.unwrap()).start_time + stop_times[att_stop_inx].time) // this is a bit wrong, we should consider the index of the old trip
+                    self.new_time(self.dataset.get_trip(trip.unwrap()).start_time + stop_times[att_stop_inx].time) // this is a bit wrong, we should consider the index of the old trip
                 };
                 // pruning if we are only looking for the best
                 if self.only_best && self.best_destination_time < arriving_time_with_new_trip {
                     continue;
                 }
-
                 if trip.is_none() || arriving_time_with_new_trip < arriving_time_with_old_trip {
-                  //  debug!("Setting new trip!");
+                    //  debug!("Setting new trip!");
                     trip = Some(new_trip.trip_id);
                     _att_stop_inx = trip_stop_inx;
+                    
+                    time_delta_change = arriving_time_with_new_trip.distance(&prec_time_in_stop);
                 } else if new_trip.trip_id == trip.unwrap() {
-                    // todo use deley before taking in optimization
+                    // This is the same trip, but maybe it is better to take it at this stop?
+                    // It all depends on the delta between the precedent arrival at this stop, 
+                    // and when this trip passes there
+                    let att_delay =  arriving_time_with_new_trip.distance(&prec_time_in_stop);
+                    if att_delay > time_delta_change {
+                        time_delta_change = att_delay;
+                        start_stop_id = att_stop_inx;
+                    }
                 }
             }
         }
@@ -300,6 +313,9 @@ impl<'a> RaptorNavigator<'a> {
         if !self.only_best { self.check_for_solution(hop_att); }
     }
 
+    fn new_time(&self, seconds_since_midnight: i64) -> GtfsTime {
+        self.navigation_params.start_time.new_replacing_time(seconds_since_midnight)
+    }
     fn update_best(&mut self, stop_id: usize, kth: u8, new_time: GtfsTime) {
         self.t.insert((stop_id, kth), new_time.clone());
         let prec_absolute_best =
@@ -338,7 +354,8 @@ impl<'a> RaptorNavigator<'a> {
 
             let near_walkable_stops = self.dataset.get_near_stops_by_walk(from_stop_id);
             let near_stops_with_distance: Vec<StopDistance> =
-                if near_walkable_stops.near_stops.is_empty() {
+               // if near_walkable_stops.near_stops.is_empty() {
+                if true {
                     self.dataset
                         .get_near_stops(&from_stop.stop_pos, NEAR_STOP_NUMBER)
                         .iter().map(|&s| self.dataset.get_stop(s))
@@ -397,7 +414,7 @@ impl<'a> RaptorNavigator<'a> {
         }
     }
 
-    fn reconstruct_solution(&self, stop_id: usize, hop_att: u8)-> Solution {
+    fn reconstruct_solution(&self, stop_id: usize, hop_att: u8) -> Solution {
         let mut solution: Solution = Default::default();
         solution.start_time = (&self.navigation_params.start_time).clone();
 
@@ -427,10 +444,12 @@ impl<'a> RaptorNavigator<'a> {
             let prec_trip = self.dataset.get_trip(prec_trip_id);
             let prec_route_id = backtrack_info.route_id.unwrap();
             let prec_route = self.dataset.get_route(prec_route_id);
+            let path = self.dataset.get_stop_times(prec_trip.stop_times_id);
 
             solution.add_bus_path(att_stop,
                                   prec_route,
                                   prec_trip,
+                                  path,
                                   backtrack_info.start_stop_inx,
                                   backtrack_info.end_index);
             att_stop = prec_stop;
@@ -445,6 +464,7 @@ impl<'a> RaptorNavigator<'a> {
     fn add_trips_to_banned(&mut self, solution: &Solution) {
         for component in &solution.components {
             if let Bus(bus_component) = component {
+                debug!("Banning trip id: {}", bus_component.trip.trip_id);
                 self.banned_trip_ids.insert(bus_component.trip.trip_id);
             }
         }

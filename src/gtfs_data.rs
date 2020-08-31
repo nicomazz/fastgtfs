@@ -64,7 +64,7 @@ impl GtfsData {
         route.stop_times.iter().map(|&st| self.get_stop_times(st)).collect()
     }
     /// returns the first trip that has `stop` (with inx after `start_stop_inx`) after time (not in excluded_trips)
-    pub fn trip_after_time(&self, route_id: usize, stop_id: usize, min_time: &GtfsTime, start_stop_inx: usize, excluded_trips: &HashSet<usize>) -> Option<(&Trip, usize)> {
+    pub fn trip_after_time(&self, route_id: usize, stop_id: usize, min_time: &GtfsTime, start_stop_inx: usize, banned_trip_ids: &HashSet<usize>) -> Option<(&Trip, usize)> {
         let route = self.get_route(route_id);
         let trips = &route.trips;
 
@@ -81,10 +81,11 @@ impl GtfsData {
             .collect::<Vec<usize>>();
 
         trips.iter()
-            .filter(|t_id| !excluded_trips.contains(t_id))
+            .filter(|t_id| !banned_trip_ids.contains(t_id))
             .map(|t_id| self.get_trip(*t_id))
+            .filter(|t| self.trip_active_on_day(t, min_time))
             .filter(|trip| trip.start_time + trips_duration >= min_time.since_midnight() as i64)
-            .find_map(|trip| {
+            .find_map(|trip| { // this returns the first for which the content is an Ok result
                 inxes_for_stop
                     .iter()
                     .filter(|&&inx| stop_times[inx].time + trip.start_time >= min_time.since_midnight() as i64)
@@ -115,8 +116,11 @@ impl GtfsData {
         near_stops(pos, number, &self.stops)
     }
 
-    pub fn trip_active_on_day(&self, trip_id: usize, day: &GtfsTime) -> bool {
+    pub fn trip_id_active_on_day(&self, trip_id: usize, day: &GtfsTime) -> bool {
         let trip = self.get_trip(trip_id);
+        self.trip_active_on_day(trip,day)
+    }
+    pub fn trip_active_on_day(&self, trip: &Trip, day: &GtfsTime) -> bool {
         if trip.service_id.is_none() {
             error!("Trip without service id! {}", trip.trip_short_name);
             return true;
@@ -133,7 +137,7 @@ impl GtfsData {
 
     pub fn route_active_on_day(&self, route_id: usize, day: &GtfsTime) -> bool {
         let route = self.get_route(route_id);
-        route.trips.iter().any(|&t| self.trip_active_on_day(t, &day))
+        route.trips.iter().any(|&t| self.trip_id_active_on_day(t, &day))
     }
 }
 
@@ -154,7 +158,7 @@ fn near_stops(pos: &LatLng, number: usize, stops: &Vec<Stop>) -> Vec<usize> {
 }
 
 // contains a list of stops, and the time for each in seconds (the first has time 0)
-#[derive(Hash, Eq, PartialEq, Debug, Serialize, Deserialize, Clone)]
+#[derive(Hash, Eq, Default, PartialEq, Debug, Serialize, Deserialize, Clone)]
 pub struct StopTimes {
     pub stop_times: Vec<StopTime>,
 }
@@ -250,9 +254,9 @@ impl GtfsTime {
         }
     }
 
-    pub fn base_day_add_from_midnight(base_day: &GtfsTime, seconds_from_midnight: i64) -> GtfsTime {
+    pub fn new_replacing_time(&self, seconds_from_midnight: i64) -> GtfsTime {
         GtfsTime {
-            timestamp: base_day.timestamp - (base_day.since_midnight() as i64) + seconds_from_midnight
+            timestamp: self.timestamp - (self.since_midnight() as i64) + seconds_from_midnight
         }
     }
     pub fn new_from_timestamp(timestamp: i64) -> GtfsTime { GtfsTime { timestamp } }
@@ -297,6 +301,9 @@ impl GtfsTime {
         self.date_time().num_seconds_from_midnight() as u64
     }
 
+    pub fn distance(&self, other: &GtfsTime) -> i64 {
+        self.timestamp - other.timestamp
+    }
     pub fn timestamp(&self) -> i64 { self.timestamp }
 }
 

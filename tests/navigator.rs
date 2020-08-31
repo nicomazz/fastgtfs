@@ -57,6 +57,7 @@ mod tests {
                 to: nave_de_vero,
                 max_changes: 3,
                 start_time: default_start_time(),
+                num_solutions_to_find: 3
             };
             navigator.find_path_multiple(params);
         });
@@ -64,8 +65,11 @@ mod tests {
         let mut sol_cnt = 0;
         for sol in rx {
             sol_cnt += 1;
+            for component in sol.components {
+// todo verify that the times are not overlapping or going back in time
+            }
             debug!("A SOLUTION HAS BEEN RECEIVED! {}", sol);
         }
-        assert_ne!(sol_cnt, 0);
+        assert_eq!(sol_cnt, 3);
     }
 }
