@@ -2,9 +2,8 @@ use std::collections::HashMap;
 use std::path::Path;
 
 use itertools::Itertools;
-use rayon::iter::ParallelIterator;
 
-use fastgtfs::gtfs_data::{StopTime, StopTimes, GtfsTime};
+use fastgtfs::gtfs_data::{StopTime, StopTimes};
 use fastgtfs::raw_models::{parse_gtfs, RawCalendar, RawRoute};
 use fastgtfs::raw_parser::{RawParser, str_time_to_seconds};
 use fastgtfs::test_utils::{generate_serialized_data, get_test_paths, make_dataset};
@@ -144,11 +143,10 @@ fn valid_stop_times() {
 fn valid_trip_start_times() {
     let ds = RawParser::read_preprocessed_data_from_default();
     let seconds_in_hour = 60 * 60;
-    let five_am = 5 * seconds_in_hour;
-    let mut after_five_am = 0;
-    let mut tot = 0;
+    let four_am = 4 * seconds_in_hour;
+
     ds.trips.iter().for_each(|t| {
-        println!("{}\n",GtfsTime::new_from_midnight(t.start_time));
+        assert!(t.start_time > four_am);
     });
 }
 
@@ -167,6 +165,7 @@ fn test_walk_distance() {
 
     let without = ds.walk_times
         .iter().filter(|i| i.near_stops.is_empty()).count();
+    println!("Without: {}",without);
     assert!(without < (ds.stops.len() as f64 * 0.06) as usize, format!("number of stops without near data: {} out of {}", without, ds.stops.len()));
 
     // ideally, this is to uncomment

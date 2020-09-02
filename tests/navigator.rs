@@ -57,7 +57,7 @@ mod tests {
                 to: nave_de_vero,
                 max_changes: 3,
                 start_time: default_start_time(),
-                num_solutions_to_find: 3
+                num_solutions_to_find: 3,
             };
             navigator.find_path_multiple(params);
         });
@@ -70,7 +70,7 @@ mod tests {
             let mut last_time = default_start_time();
             for component in &sol.components {
                 if let SolutionComponent::Bus(b) = component {
-                    assert!(last_time <= b.departure_time());
+                    assert!(last_time <= b.departure_time()); // todo fix this
                     last_time = b.arrival_time();
                 }
             }

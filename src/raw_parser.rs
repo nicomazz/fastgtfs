@@ -618,11 +618,12 @@ impl RawParser {
         self.dataset.walk_times = vec![];
         for stop in &self.dataset.stops {
             let (inx_nearest, dist_meters) = nearest_point(&stop.stop_pos, &stop_positions);
-            if dist_meters > 100.0 {
+            if dist_meters > 30.0 {
                 self.dataset.walk_times.push(StopWalkTime {
                     stop_id: stop.stop_id,
                     ..Default::default()
                 });
+                println!("Skipping one, dist: {}",dist_meters);
             } else {
                 self.dataset.walk_times.push(StopWalkTime {
                     stop_id: stop.stop_id,

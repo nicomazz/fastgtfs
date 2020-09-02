@@ -204,7 +204,7 @@ fn main() {
 
     let mut res = restore_partial_data();
 
-    let mut todo = missing(&near_stops, &res);
+    let todo = missing(&near_stops, &res);
 
     println!("---> Missing: {}", todo.len());
 

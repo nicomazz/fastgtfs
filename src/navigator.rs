@@ -63,6 +63,7 @@ pub struct RaptorNavigator<'a> {
 /// This algorithm is organized in several rounds, one for each change. We usually use a maximum of
 /// 3 changes, that allow to reach pretty much everywhere (using at maximum 4 busses)
 type Round = u8;
+
 /// This is used to walk between stops when we change bus
 const NEAR_STOP_NUMBER: usize = 30;
 
@@ -357,9 +358,9 @@ impl<'a> RaptorNavigator<'a> {
                 let from_stop = ds.get_stop(from_stop_id);
                 let near_walkable_stops = ds.get_near_stops_by_walk(from_stop.stop_id);
                 let near_stops_with_distance: Vec<StopDistance> =
-                    // todo calculate again walk distances
-                    // if near_walkable_stops.near_stops.is_empty() {
-                    if true {
+                    if near_walkable_stops.near_stops.is_empty() {
+                        // it should almost never enter here!
+                        error!("No near stops for {}", from_stop.stop_name);
                         ds.get_near_stops(&from_stop.stop_pos, NEAR_STOP_NUMBER)
                             .iter().map(|&s| ds.get_stop(s))
                             .map(|to| StopDistance {
@@ -372,7 +373,6 @@ impl<'a> RaptorNavigator<'a> {
 
                 near_stops_with_distance.into_iter().map(|sd| {
                     let to_stop_id = sd.stop_id;
-                    let _to_stop = ds.get_stop(to_stop_id);
                     let cost = RaptorNavigator::seconds_by_walk(sd.distance_meters);
 
                     WalkingPathUpdate {
