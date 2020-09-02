@@ -1,6 +1,6 @@
 use std::fmt;
 
-use crate::gtfs_data::{GtfsTime, LatLng, Route, StopTimes, Trip};
+use crate::gtfs_data::{GtfsTime, LatLng, Route, StopTimes, Trip, StopId};
 
 #[derive(Debug, Clone, Default)]
 pub struct NavigationParams {
@@ -112,8 +112,6 @@ impl BusSolutionComponent {
 pub struct WalkSolutionComponent {
     pub stop_id: usize,
 }
-
-type StopId = usize;
 
 pub struct WalkingPathUpdate {
     pub from_stop_id : StopId,

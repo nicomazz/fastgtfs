@@ -16,7 +16,6 @@ use geo::algorithm::euclidean_distance::EuclideanDistance;
 use geo::algorithm::geodesic_distance::GeodesicDistance;
 use itertools::Itertools;
 use log::error;
-use log::trace;
 use serde::{Deserialize, Serialize};
 
 use self::serde::export::Formatter;
@@ -184,7 +183,7 @@ type = "SizedCache<(u64,u64, usize), Vec<usize>>",
 create = "{ SizedCache::with_size(5000) }",
 convert = r#"{ ((pos.lat * 1000.0) as u64 , (pos.lng * 1000.0) as u64,number) }"#
 )]
-fn near_stops(pos: &LatLng, number: usize, stops: &Vec<Stop>) -> Vec<usize> {
+pub fn near_stops(pos: &LatLng, number: usize, stops: &Vec<Stop>) -> Vec<usize> {
     let coord = pos.as_point();
     stops
         .iter()
@@ -421,3 +420,9 @@ pub struct StopDistance {
     pub stop_id: usize,
     pub distance_meters: usize,
 }
+
+pub type RouteId = usize;
+pub type TripId = usize;
+pub type StopId = usize;
+pub type StopTimesId = usize;
+pub type StopIndex = usize;

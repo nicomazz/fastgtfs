@@ -64,15 +64,16 @@ mod tests {
 
         let mut sol_cnt = 0;
         for sol in rx {
+            debug!("A SOLUTION HAS BEEN RECEIVED! {}", sol);
+
             sol_cnt += 1;
             let mut last_time = default_start_time();
             for component in &sol.components {
                 if let SolutionComponent::Bus(b) = component {
-                 // todo uncomment   assert!(last_time <= b.departure_time());
+                    assert!(last_time <= b.departure_time());
                     last_time = b.arrival_time();
                 }
             }
-            debug!("A SOLUTION HAS BEEN RECEIVED! {}", sol);
         }
         assert_eq!(sol_cnt, 3);
     }

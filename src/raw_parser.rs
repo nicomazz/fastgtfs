@@ -74,7 +74,7 @@ mod gtfs_serializer {
             let mut buffer = flexbuffers::FlexbufferSerializer::new();
             v.serialize(&mut buffer).unwrap();
             let out_file_name = &format!("{}/{}", out_path, name);
-            let mut output_file = File::create(out_file_name).expect(&format!("Can't create {}", out_file_name));
+            let mut output_file = File::create(out_file_name).unwrap_or_else(|_| panic!("Can't create {}", out_file_name));
             output_file.write_all(buffer.view()).unwrap();
         })
     }
@@ -148,7 +148,7 @@ mod gtfs_deserializer {
     }
 }
 
-fn read_file(path: &Path) -> Vec<u8> {
+pub fn read_file(path: &Path) -> Vec<u8> {
     let mut content = vec![];
     File::open(path).unwrap().read_to_end(&mut content).unwrap();
     content
@@ -271,11 +271,9 @@ impl RawParser {
         raw_stops.into_iter().for_each(|s| self.add_stop(s));
     }
 
-    fn add_stop(&mut self, stop: RawStop) {
-        let number_of_stops = self.dataset.stops.len();
-        self.stop_name_to_inx.insert(stop.stop_id, number_of_stops);
-        self.dataset.stops.push(Stop {
-            stop_id: number_of_stops,
+    pub fn create_stop(stop: RawStop, stop_id: usize) -> Stop {
+        Stop {
+            stop_id,
             stop_name: stop.stop_name,
             stop_pos: LatLng {
                 lat: stop.stop_lat.parse::<f64>().unwrap(),
@@ -283,7 +281,12 @@ impl RawParser {
             },
             stop_timezone: "".to_string(),
             routes: Default::default(),
-        })
+        }
+    }
+    fn add_stop(&mut self, stop: RawStop) {
+        let number_of_stops = self.dataset.stops.len();
+        self.stop_name_to_inx.insert(stop.stop_id.clone(), number_of_stops);
+        self.dataset.stops.push(RawParser::create_stop(stop, number_of_stops))
     }
 
     fn parse_stop_times(&mut self, path: &Path) {
