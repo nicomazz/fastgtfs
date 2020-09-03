@@ -209,12 +209,11 @@ impl RawParser {
         }
 
         let metadata = fs::metadata(routes_file).unwrap();
-        // every 5 minutes
         let last_modified = metadata.modified().unwrap().elapsed().unwrap().as_secs();
 
 
         println!("Last modified: {}", last_modified);
-        if last_modified > 60 * 60 { // rebuild the data every hour
+        if last_modified > 60 * 60 * 24 { // rebuild the data every day
             println!("Generating serializable data!");
             self.generate_serialized_data(path);
         }

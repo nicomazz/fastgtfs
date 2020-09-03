@@ -1,6 +1,7 @@
 use std::fmt;
 
 use crate::gtfs_data::{GtfsTime, LatLng, Route, StopTimes, Trip, StopId};
+use crate::navigator::BacktrackingInfo;
 
 #[derive(Debug, Clone, Default)]
 pub struct NavigationParams {
@@ -113,8 +114,10 @@ pub struct WalkSolutionComponent {
     pub stop_id: usize,
 }
 
-pub struct WalkingPathUpdate {
-    pub from_stop_id : StopId,
+pub struct TimeUpdate {
     pub to_stop_id: StopId,
-    pub cost : u64,
+    //pub cost_seconds: u64,
+    pub destination_time: GtfsTime,
+    // This is none only for walking paths
+    pub backtrack_info: BacktrackingInfo,
 }

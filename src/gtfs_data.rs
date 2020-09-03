@@ -68,7 +68,7 @@ impl GtfsData {
     /// We make the `almost right` assumption that all the trips are from the same route id, and that they all share the same stop_time.
     /// This is true most of the times.
     /// TODO: handle this correctly
-    pub fn trip_after_time(&self, trips: &Vec<usize>, stop_id: usize, min_time: &GtfsTime, start_stop_inx: usize, banned_trip_ids: &HashSet<usize>) -> Option<(&Trip, usize)> {
+    pub fn trip_after_time(&self, trips: &[TripId], stop_id: StopId, min_time: &GtfsTime, start_stop_inx: StopIndex, banned_trip_ids: &HashSet<TripId>) -> Option<(&Trip, StopIndex)> {
         if trips.is_empty() { return None; }
 
         let first_trip = self.get_trip(*trips.first().unwrap());
@@ -87,8 +87,8 @@ impl GtfsData {
         trips.iter()
             .filter(|t_id| !banned_trip_ids.contains(t_id))
             .map(|t_id| self.get_trip(*t_id))
-            .filter(|t| self.trip_active_on_time(t, min_time, None))
-            .filter(|trip| trip.start_time + trips_duration >= min_time.since_midnight() as i64)
+            .filter(|t| self.trip_active_on_time(t, min_time, None) &&
+                    t.start_time + trips_duration >= min_time.since_midnight() as i64)
             .find_map(|trip| { // this returns the first for which the content is an Ok result
                 inxes_for_stop
                     .iter()
@@ -207,7 +207,7 @@ pub struct StopTime {
 }
 
 impl StopTime {
-    pub fn real_time(&self, trip_start_time: i64) -> i64 {
+    pub fn time_from_offset(&self, trip_start_time: i64) -> i64 {
         self.time + trip_start_time
     }
 }
@@ -314,8 +314,9 @@ impl GtfsTime {
         self.timestamp = (other.timestamp as u64 - other.since_midnight() + since_midnight) as i64;
     }
 
-    pub fn add_seconds(&mut self, sec: u64) {
+    pub fn add_seconds(&mut self, sec: u64) -> &GtfsTime{
         self.timestamp += sec as i64;
+        self
     }
     fn date_time(&self) -> DateTime<Utc> {
         Utc.timestamp(self.timestamp, 0)
@@ -339,8 +340,8 @@ impl GtfsTime {
         self.date_time().num_seconds_from_midnight() as u64
     }
 
-    pub fn distance(&self, other: &GtfsTime) -> i64 {
-        self.timestamp - other.timestamp
+    pub fn distance(&self, other: &GtfsTime) -> u64 {
+        (self.timestamp - other.timestamp).abs() as u64
     }
     pub fn timestamp(&self) -> i64 { self.timestamp }
 }
