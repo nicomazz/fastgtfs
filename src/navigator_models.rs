@@ -1,6 +1,6 @@
 use std::fmt;
 
-use crate::gtfs_data::{GtfsTime, LatLng, Route, StopTimes, Trip, StopId};
+use crate::gtfs_data::{GtfsTime, LatLng, Route, StopId, StopTimes, Trip};
 use crate::navigator::BacktrackingInfo;
 
 #[derive(Debug, Clone, Default)]
@@ -22,14 +22,18 @@ pub struct Solution {
 
 impl fmt::Display for Solution {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        writeln!(f, "\n####### Solution components: {}", self.components.len()).unwrap();
+        writeln!(
+            f,
+            "\n####### Solution components: {}",
+            self.components.len()
+        )
+        .unwrap();
         for c in &self.components {
             write!(f, "{}", c).unwrap();
         }
         write!(f, "####### ")
     }
 }
-
 
 impl Solution {
     pub(crate) fn set_last_component_start(&mut self, stop_id: usize) {
@@ -40,13 +44,22 @@ impl Solution {
         }
     }
     pub(crate) fn add_walking_path(&mut self, stop_id: usize) {
-        let component = WalkSolutionComponent { from_stop_id: stop_id };
+        let component = WalkSolutionComponent {
+            from_stop_id: stop_id,
+        };
         self.set_last_component_start(stop_id);
         self.components.push(SolutionComponent::Walk(component));
     }
 
-    pub(crate) fn add_bus_path(&mut self, stop_id: usize, route: &Route, trip: &Trip, path: &StopTimes, from_inx: usize,
-                               to_inx: usize) {
+    pub(crate) fn add_bus_path(
+        &mut self,
+        stop_id: usize,
+        route: &Route,
+        trip: &Trip,
+        path: &StopTimes,
+        from_inx: usize,
+        to_inx: usize,
+    ) {
         let component = BusSolutionComponent {
             route: route.clone(),
             trip: trip.clone(),
@@ -63,7 +76,6 @@ impl Solution {
     }
 }
 
-
 #[derive(Debug, Clone)]
 pub enum SolutionComponent {
     Walk(WalkSolutionComponent),
@@ -77,14 +89,18 @@ impl fmt::Display for SolutionComponent {
                 writeln!(f, "Walk path").unwrap();
             }
             SolutionComponent::Bus(b) => {
-                writeln!(f, "Route {} - {} trip {} \nfrom {} ({}) to {} ({})",
-                         b.route.route_long_name,
-                         b.route.route_short_name,
-                         b.trip.trip_id,
-                         b.from_inx.unwrap(),
-                         b.departure_time(),
-                         b.to_inx.unwrap(),
-                         b.arrival_time()).unwrap();
+                writeln!(
+                    f,
+                    "Route {} - {} trip {} \nfrom {} ({}) to {} ({})",
+                    b.route.route_long_name,
+                    b.route.route_short_name,
+                    b.trip.trip_id,
+                    b.from_inx.unwrap(),
+                    b.departure_time(),
+                    b.to_inx.unwrap(),
+                    b.arrival_time()
+                )
+                .unwrap();
             }
         };
         writeln!(f, "               ↓")
@@ -103,11 +119,15 @@ pub struct BusSolutionComponent {
 
 impl BusSolutionComponent {
     pub fn departure_time(&self) -> GtfsTime {
-        GtfsTime::new_from_midnight(self.trip.start_time + self.path.stop_times[self.from_inx.unwrap()].time)
+        GtfsTime::new_from_midnight(
+            self.trip.start_time + self.path.stop_times[self.from_inx.unwrap()].time,
+        )
     }
 
     pub fn arrival_time(&self) -> GtfsTime {
-        GtfsTime::new_from_midnight(self.trip.start_time + self.path.stop_times[self.to_inx.unwrap()].time)
+        GtfsTime::new_from_midnight(
+            self.trip.start_time + self.path.stop_times[self.to_inx.unwrap()].time,
+        )
     }
 }
 #[derive(Debug, Default, Clone)]

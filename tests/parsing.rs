@@ -5,7 +5,7 @@ use itertools::Itertools;
 
 use fastgtfs::gtfs_data::{StopTime, StopTimes};
 use fastgtfs::raw_models::{parse_gtfs, RawCalendar, RawRoute};
-use fastgtfs::raw_parser::{RawParser, str_time_to_seconds};
+use fastgtfs::raw_parser::{str_time_to_seconds, RawParser};
 use fastgtfs::test_utils::{generate_serialized_data, get_test_paths, make_dataset};
 
 #[test]
@@ -68,24 +68,44 @@ fn serialize_and_deserialize() {
 fn stop_times_per_route() {
     let dataset = make_dataset();
 
-    let stop_times_per_route = dataset.routes
+    let stop_times_per_route = dataset
+        .routes
         .iter()
-        .map(|route|
-            (route.route_id,
-             (route.trips
-                  .iter()
-                  .map(|trip_id| dataset.get_trip(*trip_id))
-                  .map(|trip| trip.stop_times_id)
-                  .unique()
-                  .count(),
-              route.trips.len(),
-             )))
+        .map(|route| {
+            (
+                route.route_id,
+                (
+                    route
+                        .trips
+                        .iter()
+                        .map(|trip_id| dataset.get_trip(*trip_id))
+                        .map(|trip| trip.stop_times_id)
+                        .unique()
+                        .count(),
+                    route.trips.len(),
+                ),
+            )
+        })
         .collect::<HashMap<usize, (_, _)>>();
 
-    let multiple_paths = stop_times_per_route.iter().filter(|(_, (n, _))| *n > 1).count();
-    let multiple_paths_4 = stop_times_per_route.iter().filter(|(_, (n, _))| *n > 3).count();
-    println!("Routes with multiple paths: {}/{}", multiple_paths, dataset.routes.len());
-    println!("Routes with more than 3 paths: {}/{}", multiple_paths_4, dataset.routes.len());
+    let multiple_paths = stop_times_per_route
+        .iter()
+        .filter(|(_, (n, _))| *n > 1)
+        .count();
+    let multiple_paths_4 = stop_times_per_route
+        .iter()
+        .filter(|(_, (n, _))| *n > 3)
+        .count();
+    println!(
+        "Routes with multiple paths: {}/{}",
+        multiple_paths,
+        dataset.routes.len()
+    );
+    println!(
+        "Routes with more than 3 paths: {}/{}",
+        multiple_paths_4,
+        dataset.routes.len()
+    );
     //println!("{:?}", stop_times_per_route);
     assert!(multiple_paths < dataset.routes.len() / 4);
     assert!(multiple_paths_4 < dataset.routes.len() / 10);
@@ -94,13 +114,19 @@ fn stop_times_per_route() {
 #[test]
 fn test_routes_per_stop() {
     let ds = make_dataset();
-    let alone_stops = ds.stops
+    let alone_stops = ds
+        .stops
         .iter()
         .filter(|s| s.routes.len() == 0)
         .map(|s| (s.stop_name.clone(), s.routes.len()))
         .collect::<Vec<(String, usize)>>();
 
-    println!("Stops without routes: {}/{}\n {:?}", alone_stops.len(), ds.stops.len(), alone_stops);
+    println!(
+        "Stops without routes: {}/{}\n {:?}",
+        alone_stops.len(),
+        ds.stops.len(),
+        alone_stops
+    );
     assert!(alone_stops.len() < ds.stops.len() / 20);
 }
 
@@ -108,10 +134,16 @@ fn test_routes_per_stop() {
 fn test_vector_equality() {
     let mut map: HashMap<StopTimes, usize> = HashMap::new();
     let v1 = StopTimes {
-        stop_times: vec![StopTime { stop_id: 1, time: 1 }]
+        stop_times: vec![StopTime {
+            stop_id: 1,
+            time: 1,
+        }],
     };
     let v2 = StopTimes {
-        stop_times: vec![StopTime { stop_id: 1, time: 1 }]
+        stop_times: vec![StopTime {
+            stop_id: 1,
+            time: 1,
+        }],
     };
 
     map.insert(v1, 1);
@@ -130,7 +162,7 @@ fn test_trip_services() {
 fn valid_stop_times() {
     let ds = RawParser::read_preprocessed_data_from_default();
     let seconds_in_hour = 60 * 60;
- 
+
     ds.stop_times.iter().for_each(|st| {
         assert!(!st.stop_times.is_empty());
         for stop_time in &st.stop_times {
@@ -155,7 +187,6 @@ fn date_parsing() {
     let seconds_in_hour = 60 * 60;
     let five_am = 5 * seconds_in_hour;
     assert_eq!(str_time_to_seconds("05:01:02"), five_am + 60 + 2);
-
 }
 #[test]
 fn test_walk_distance() {
@@ -163,15 +194,25 @@ fn test_walk_distance() {
     assert_eq!(ds.walk_times.len(), ds.stops.len());
     assert_eq!(ds.stops[10].stop_id, ds.walk_times[10].stop_id);
 
-    let without = ds.walk_times
-        .iter().filter(|i| i.near_stops.is_empty()).count();
-    println!("Without: {}",without);
-    assert!(without < (ds.stops.len() as f64 * 0.06) as usize, format!("number of stops without near data: {} out of {}", without, ds.stops.len()));
+    let without = ds
+        .walk_times
+        .iter()
+        .filter(|i| i.near_stops.is_empty())
+        .count();
+    println!("Without: {}", without);
+    assert!(
+        without < (ds.stops.len() as f64 * 0.06) as usize,
+        format!(
+            "number of stops without near data: {} out of {}",
+            without,
+            ds.stops.len()
+        )
+    );
 
     // ideally, this is to uncomment
     /* for i in ds.walk_times {
-         if !i.near_stops.is_empty() {
-             assert_eq!(i.near_stops[0].stop_id, i.stop_id)
-         }
-     }*/
+        if !i.near_stops.is_empty() {
+            assert_eq!(i.near_stops[0].stop_id, i.stop_id)
+        }
+    }*/
 }

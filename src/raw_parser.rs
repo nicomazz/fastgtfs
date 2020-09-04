@@ -7,12 +7,17 @@ use std::time::Instant;
 
 use geo::algorithm::geodesic_distance::GeodesicDistance;
 use itertools::Itertools;
-use rayon::iter::{IntoParallelIterator, IntoParallelRefIterator};
+use log::error;
 use rayon::iter::ParallelIterator;
-use log::{error};
+use rayon::iter::{IntoParallelIterator, IntoParallelRefIterator};
 
-use crate::gtfs_data::{GtfsData, GtfsTime, LatLng, Route, Service, ServiceException, Shape, Stop, StopDistance, StopTime, StopTimes, StopWalkTime, to_coordinates, Trip};
-use crate::raw_models::{parse_gtfs, RawRoute, RawService, RawServiceException, RawShape, RawStop, RawStopTime, RawTrip};
+use crate::gtfs_data::{
+    to_coordinates, GtfsData, GtfsTime, LatLng, Route, Service, ServiceException, Shape, Stop,
+    StopDistance, StopTime, StopTimes, StopWalkTime, Trip,
+};
+use crate::raw_models::{
+    parse_gtfs, RawRoute, RawService, RawServiceException, RawShape, RawStop, RawStopTime, RawTrip,
+};
 
 #[derive(Debug, Default)]
 pub struct RawParser {
@@ -74,7 +79,8 @@ mod gtfs_serializer {
             let mut buffer = flexbuffers::FlexbufferSerializer::new();
             v.serialize(&mut buffer).unwrap();
             let out_file_name = &format!("{}/{}", out_path, name);
-            let mut output_file = File::create(out_file_name).unwrap_or_else(|_| panic!("Can't create {}", out_file_name));
+            let mut output_file = File::create(out_file_name)
+                .unwrap_or_else(|_| panic!("Can't create {}", out_file_name));
             output_file.write_all(buffer.view()).unwrap();
         })
     }
@@ -90,10 +96,10 @@ mod gtfs_serializer {
             serialize_vector(f.clone(), "services", ds.services),
             serialize_vector(f.clone(), "walk_times", ds.walk_times),
         ]
-            .into_iter()
-            .for_each(|v| {
-                v.join().unwrap();
-            });
+        .into_iter()
+        .for_each(|v| {
+            v.join().unwrap();
+        });
     }
 }
 
@@ -171,7 +177,6 @@ impl RawParser {
         self.try_parse_walk_paths();
     }
 
-
     fn parse_path(&mut self, path: &Path) {
         self.parse_stops(path);
         self.parse_shape(path);
@@ -198,7 +203,6 @@ impl RawParser {
         self.ensure_data_serialized_created_in_path(DEFAULT_OUT_PATH)
     }
 
-
     pub fn ensure_data_serialized_created_in_path(&mut self, path: &str) {
         println!("Ensuring data serialized");
         // todo, also check the version of the data
@@ -211,14 +215,13 @@ impl RawParser {
         let metadata = fs::metadata(routes_file).unwrap();
         let last_modified = metadata.modified().unwrap().elapsed().unwrap().as_secs();
 
-
         println!("Last modified: {}", last_modified);
-        if last_modified > 60 * 60 * 24 { // rebuild the data every day
+        if last_modified > 60 * 60 * 24 {
+            // rebuild the data every day
             println!("Generating serializable data!");
             self.generate_serialized_data(path);
         }
     }
-
 
     pub fn generate_serialized_data_into_default(&mut self) {
         self.generate_serialized_data(DEFAULT_OUT_PATH)
@@ -229,14 +232,16 @@ impl RawParser {
         let destination_folder = &format!("{}/{}", path, out_folder);
         if !Path::new(destination_folder).exists() {
             println!("Creating output path!");
-            fs::create_dir_all(destination_folder).expect(&format!("Can't create output folder {}", destination_folder));
+            fs::create_dir_all(destination_folder).expect(&format!(
+                "Can't create output folder {}",
+                destination_folder
+            ));
         }
         println!("Creating serialized data!");
         self.parse();
         let ds = std::mem::take(&mut self.dataset);
         gtfs_serializer::generate_serialized_data(ds, out_folder.to_string());
     }
-
 
     fn assign_routes_to_stops(&mut self) {
         let ds = &mut self.dataset;
@@ -251,7 +256,10 @@ impl RawParser {
                 .map(|stop_times_id| ds.get_stop_times(stop_times_id))
                 .for_each(|stop_times| {
                     stop_times.stop_times.iter().for_each(|stop_time| {
-                        routes_for_stop_id.entry(stop_time.stop_id).or_default().push(r.route_id);
+                        routes_for_stop_id
+                            .entry(stop_time.stop_id)
+                            .or_default()
+                            .push(r.route_id);
                     })
                 });
         });
@@ -284,8 +292,11 @@ impl RawParser {
     }
     fn add_stop(&mut self, stop: RawStop) {
         let number_of_stops = self.dataset.stops.len();
-        self.stop_name_to_inx.insert(stop.stop_id.clone(), number_of_stops);
-        self.dataset.stops.push(RawParser::create_stop(stop, number_of_stops))
+        self.stop_name_to_inx
+            .insert(stop.stop_id.clone(), number_of_stops);
+        self.dataset
+            .stops
+            .push(RawParser::create_stop(stop, number_of_stops))
     }
 
     fn parse_stop_times(&mut self, path: &Path) {
@@ -320,19 +331,24 @@ impl RawParser {
     fn assign_stop_times_to_routes(&mut self) {
         let ds = &mut self.dataset;
 
-        let routes_stop_times: Vec<BTreeSet<usize>> = ds.routes.par_iter().map(|r|
-            r.trips
-                .iter()
-                .map(|trip_id| ds.get_trip(*trip_id).stop_times_id)
-                .collect()
-        ).collect();
+        let routes_stop_times: Vec<BTreeSet<usize>> = ds
+            .routes
+            .par_iter()
+            .map(|r| {
+                r.trips
+                    .iter()
+                    .map(|trip_id| ds.get_trip(*trip_id).stop_times_id)
+                    .collect()
+            })
+            .collect();
 
-        ds.routes.iter_mut().zip(routes_stop_times.into_iter())
+        ds.routes
+            .iter_mut()
+            .zip(routes_stop_times.into_iter())
             .for_each(|(route, stop_times)| {
                 route.stop_times = stop_times;
             });
     }
-
 
     fn create_stop_times(
         &self,
@@ -355,7 +371,10 @@ impl RawParser {
 
         StopTimeInConstruction {
             trip_id,
-            stop_times: StopTimes { stop_times_id: 0, stop_times },
+            stop_times: StopTimes {
+                stop_times_id: 0,
+                stop_times,
+            },
             start_time,
         }
     }
@@ -444,13 +463,12 @@ impl RawParser {
     fn parse_services(&mut self, path: &Path) {
         let services_path = Path::new(&path).join(Path::new("calendar.txt"));
         let services_exceptions_path = Path::new(&path).join(Path::new("calendar_dates.txt"));
-        let raw_services: Vec<RawService> = parse_gtfs(&services_path)
-            .unwrap_or_else(|_| {
-                println!("calendar.txt not found!");
-                vec![]
-            });
-        let raw_services_exceptions: Vec<RawServiceException> = parse_gtfs(&services_exceptions_path)
-            .unwrap_or_else(|_| {
+        let raw_services: Vec<RawService> = parse_gtfs(&services_path).unwrap_or_else(|_| {
+            println!("calendar.txt not found!");
+            vec![]
+        });
+        let raw_services_exceptions: Vec<RawServiceException> =
+            parse_gtfs(&services_exceptions_path).unwrap_or_else(|_| {
                 println!("calendar_dates.txt not found!");
                 vec![]
             });
@@ -466,23 +484,29 @@ impl RawParser {
         }
         // Add remaining exceptions without a service in calendar.txt
 
-        let service_ids = raw_services.iter().map(|s| s.service_id.clone()).collect::<HashSet<String>>();
+        let service_ids = raw_services
+            .iter()
+            .map(|s| s.service_id.clone())
+            .collect::<HashSet<String>>();
         for exception in raw_services_exceptions {
             if service_ids.contains(&exception.service_id) {
                 continue;
             }
-            self.add_service(&RawService{
-                service_id: exception.service_id.clone(),
-                monday: "0".to_string(),
-                tuesday: "0".to_string(),
-                wednesday: "0".to_string(),
-                thursday: "0".to_string(),
-                friday: "0".to_string(),
-                saturday: "0".to_string(),
-                sunday: "0".to_string(),
-                start_date: "19700101".to_string(),
-                end_date: "19700101".to_string()
-            }, vec![exception]);
+            self.add_service(
+                &RawService {
+                    service_id: exception.service_id.clone(),
+                    monday: "0".to_string(),
+                    tuesday: "0".to_string(),
+                    wednesday: "0".to_string(),
+                    thursday: "0".to_string(),
+                    friday: "0".to_string(),
+                    saturday: "0".to_string(),
+                    sunday: "0".to_string(),
+                    start_date: "19700101".to_string(),
+                    end_date: "19700101".to_string(),
+                },
+                vec![exception],
+            );
         }
     }
 
@@ -496,15 +520,26 @@ impl RawParser {
             days: self.generate_service_days(&service),
             start_date: GtfsTime::from_date(&service.start_date),
             end_date: GtfsTime::from_date(&service.end_date),
-            exceptions: exceptions.into_iter().map(|e| ServiceException {
-                date: GtfsTime::from_date(&e.date),
-                running: e.exception_type == "1",
-            }).collect(),
+            exceptions: exceptions
+                .into_iter()
+                .map(|e| ServiceException {
+                    date: GtfsTime::from_date(&e.date),
+                    running: e.exception_type == "1",
+                })
+                .collect(),
         })
     }
 
     fn generate_service_days(&self, service: &RawService) -> Vec<bool> {
-        let days = vec![&service.monday, &service.tuesday, &service.wednesday, &service.thursday, &service.friday, &service.saturday, &service.sunday];
+        let days = vec![
+            &service.monday,
+            &service.tuesday,
+            &service.wednesday,
+            &service.thursday,
+            &service.friday,
+            &service.saturday,
+            &service.sunday,
+        ];
         days.into_iter().map(|d| d == "1").collect::<Vec<bool>>()
     }
 
@@ -518,7 +553,8 @@ impl RawParser {
 
     fn add_trip(&mut self, trip: RawTrip) {
         let number_of_trips = self.dataset.trips.len();
-        self.trip_name_to_inx.insert(trip.trip_id.clone(), number_of_trips);
+        self.trip_name_to_inx
+            .insert(trip.trip_id.clone(), number_of_trips);
         let trip_id = number_of_trips;
         let route_id = *self.routes_name_to_inx.get(&trip.route_id).unwrap();
         let shape_id = *self.shape_name_to_inx.get(&trip.shape_id).unwrap();
@@ -526,7 +562,7 @@ impl RawParser {
         let service_id: Option<usize> = if let Some(s_id) = service_id_val {
             Some(*s_id)
         } else {
-            error!("Shape id not found: {}, trip: {:?}",trip.service_id, trip);
+            error!("Shape id not found: {}, trip: {:?}", trip.service_id, trip);
             None
         };
 
@@ -576,6 +612,7 @@ impl RawParser {
         /*
          *  List of points. :lat;lng"
          */
+        
         let stop_positions = (0..stops_number)
             .map(|_| lines.next().unwrap())
             .map(|l| l.split(';').collect())
@@ -587,29 +624,31 @@ impl RawParser {
 
         // For each point, let's get the nearest stop id
         // Then, stop_mappings[i] -> stop_id associated to the i-th point.
-        let stop_mappings: Vec<usize> = stop_positions.iter().map(|p| {
-            *self.dataset.get_near_stops(p, 1).first().unwrap()
-        }).collect();
+        let stop_mappings: Vec<usize> = stop_positions
+            .iter()
+            .map(|p| *self.dataset.get_near_stops(p, 1).first().unwrap())
+            .collect();
 
         let walking_result = (0..stops_number)
             .map(|_| lines.next().unwrap())
-            .map(|l|
+            .map(|l| {
                 l.split(' ')
                     .filter(|s| !s.is_empty())
                     .map(|s| s.parse::<usize>().unwrap())
-                    .collect())
-            .map(|v: Vec<usize>| {
-                StopWalkTime {
-                    stop_id: stop_mappings[v[0] - 1],
-                    near_stops: v.iter().skip(1).step_by(2).zip(
-                        v.iter().skip(2).step_by(2))
-                        .map(|(&stop, &distance)| {
-                            StopDistance {
-                                stop_id: stop_mappings[stop - 1],
-                                distance_meters: distance,
-                            }
-                        }).collect(),
-                }
+                    .collect()
+            })
+            .map(|v: Vec<usize>| StopWalkTime {
+                stop_id: stop_mappings[v[0] - 1],
+                near_stops: v
+                    .iter()
+                    .skip(1)
+                    .step_by(2)
+                    .zip(v.iter().skip(2).step_by(2))
+                    .map(|(&stop, &distance)| StopDistance {
+                        stop_id: stop_mappings[stop - 1],
+                        distance_meters: distance,
+                    })
+                    .collect(),
             })
             .collect::<Vec<StopWalkTime>>();
 
@@ -622,7 +661,7 @@ impl RawParser {
                     stop_id: stop.stop_id,
                     ..Default::default()
                 });
-                println!("Skipping one, dist: {}",dist_meters);
+                println!("Skipping one, dist: {}", dist_meters);
             } else {
                 self.dataset.walk_times.push(StopWalkTime {
                     stop_id: stop.stop_id,
@@ -634,14 +673,13 @@ impl RawParser {
 }
 
 /// return the index in points of the nearest point to target
-    /// (index,distance)
+/// (index,distance)
 fn nearest_point(target: &LatLng, points: &Vec<LatLng>) -> (usize, f64) {
     let coord = target.as_point();
     points
         .iter()
         .enumerate()
-        .min_by_key(|(_, pos)|
-            (pos.as_point().geodesic_distance(&coord) * 100000.0) as i64)
+        .min_by_key(|(_, pos)| (pos.as_point().geodesic_distance(&coord) * 100000.0) as i64)
         .map(|(i, pos)| (i, pos.as_point().geodesic_distance(&coord)))
         .unwrap()
 }

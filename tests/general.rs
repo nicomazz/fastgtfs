@@ -75,7 +75,6 @@ fn test_gtfs_time() {
     let inf = GtfsTime::new_infinite();
     assert!(GtfsTime::from_date(&"21000101".to_string()) < inf);
 
-
     let from_mid = GtfsTime::new_from_midnight(42);
     assert_eq!(from_mid.since_midnight(), 42);
 }

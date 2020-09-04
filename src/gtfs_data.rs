@@ -6,14 +6,11 @@ use std::collections::{BTreeSet, HashSet};
 use std::fmt;
 use std::time::SystemTime;
 
-use cached::{
-    proc_macro::cached,
-    SizedCache,
-};
-use chrono::{Datelike, DateTime, NaiveDate, NaiveTime, Timelike, TimeZone, Utc};
-use geo::{Coordinate, Point};
+use cached::{proc_macro::cached, SizedCache};
+use chrono::{DateTime, Datelike, NaiveDate, NaiveTime, TimeZone, Timelike, Utc};
 use geo::algorithm::euclidean_distance::EuclideanDistance;
 use geo::algorithm::geodesic_distance::GeodesicDistance;
+use geo::{Coordinate, Point};
 use itertools::Itertools;
 use log::error;
 use serde::{Deserialize, Serialize};
@@ -33,7 +30,7 @@ pub struct GtfsData {
     pub stop_times: Vec<StopTimes>,
 
     pub walk_times: Vec<StopWalkTime>,
-//pub agencies: Vec<Agency>,
+    //pub agencies: Vec<Agency>,
 }
 
 impl GtfsData {
@@ -53,7 +50,9 @@ impl GtfsData {
         &self.stop_times[id]
     }
 
-    pub fn get_near_stops_by_walk(&self, stop_id: usize) -> &StopWalkTime { &self.walk_times[stop_id] }
+    pub fn get_near_stops_by_walk(&self, stop_id: usize) -> &StopWalkTime {
+        &self.walk_times[stop_id]
+    }
 
     pub fn get_service(&self, id: usize) -> &Service {
         &self.services[id]
@@ -62,21 +61,29 @@ impl GtfsData {
     pub fn get_route_stop_times(&self, route_id: usize) -> Vec<&StopTimes> {
         let route = self.get_route(route_id);
         // There are the stop times of the route's trips, without duplicates
-        route.stop_times.iter().map(|&st| self.get_stop_times(st)).collect()
+        route
+            .stop_times
+            .iter()
+            .map(|&st| self.get_stop_times(st))
+            .collect()
     }
 
     /// returns the first trip that has `stop` (with inx after `start_stop_inx`) after time (not in excluded_trips)
     /// We make the `almost right` assumption that all the trips are from the same route id, and that they all share the same stop_time.
     /// This is true most of the times.
     /// TODO: handle this correctly
-    pub fn trip_after_time(&self,
-                           trips: &[TripId],
-                           stop_id: StopId,
-                           min_time: &GtfsTime,
-                           start_stop_inx: StopIndex,
-                           stop_times_id: StopTimesId,
-                           banned_trip_ids: &HashSet<TripId>) -> Option<(&Trip, StopIndex)> {
-        if trips.is_empty() { return None; }
+    pub fn trip_after_time(
+        &self,
+        trips: &[TripId],
+        stop_id: StopId,
+        min_time: &GtfsTime,
+        start_stop_inx: StopIndex,
+        stop_times_id: StopTimesId,
+        banned_trip_ids: &HashSet<TripId>,
+    ) -> Option<(&Trip, StopIndex)> {
+        if trips.is_empty() {
+            return None;
+        }
 
         let first_trip = self.get_trip(*trips.first().unwrap());
         let stop_times = &self.get_stop_times(first_trip.stop_times_id).stop_times;
@@ -91,16 +98,22 @@ impl GtfsData {
             .map(|(inx, _)| inx)
             .collect::<Vec<usize>>();
 
-        trips.iter()
+        trips
+            .iter()
             .filter(|t_id| !banned_trip_ids.contains(t_id))
             .map(|t_id| self.get_trip(*t_id))
-            .filter(|t| t.stop_times_id == stop_times_id &&
-                self.trip_active_on_time(t, min_time, None) &&
-                t.start_time + trips_duration >= min_time.since_midnight() as i64)
-            .find_map(|trip| { // this returns the first for which the content is an Ok result
+            .filter(|t| {
+                t.stop_times_id == stop_times_id
+                    && self.trip_active_on_time(t, min_time, None)
+                    && t.start_time + trips_duration >= min_time.since_midnight() as i64
+            })
+            .find_map(|trip| {
+                // this returns the first for which the content is an Ok result
                 inxes_for_stop
                     .iter()
-                    .filter(|&&inx| stop_times[inx].time + trip.start_time > min_time.since_midnight() as i64)
+                    .filter(|&&inx| {
+                        stop_times[inx].time + trip.start_time > min_time.since_midnight() as i64
+                    })
                     .map(|&inx| (trip, inx))
                     .next()
             })
@@ -109,9 +122,10 @@ impl GtfsData {
     // todo: overoptimize
     pub fn find_nearest_stop(&self, pos: &LatLng) -> &Stop {
         let coord = pos.as_point();
-        let item = self.stops.iter().min_by_key(|s| {
-            s.stop_pos.as_point().geodesic_distance(&coord) as i64
-        });
+        let item = self
+            .stops
+            .iter()
+            .min_by_key(|s| s.stop_pos.as_point().geodesic_distance(&coord) as i64);
         item.unwrap()
     }
 
@@ -128,7 +142,12 @@ impl GtfsData {
         near_stops(pos, number, &self.stops)
     }
 
-    pub fn trip_id_active_on_time(&self, trip_id: usize, day: &GtfsTime, within_hours: Option<i64>) -> bool {
+    pub fn trip_id_active_on_time(
+        &self,
+        trip_id: usize,
+        day: &GtfsTime,
+        within_hours: Option<i64>,
+    ) -> bool {
         let trip = self.get_trip(trip_id);
         self.trip_active_on_time(trip, day, within_hours)
     }
@@ -141,7 +160,12 @@ impl GtfsData {
     }
     /// returns true if this trip goes within `[time, time + within_hours]`,
     /// taking care of the service and its exceptions
-    pub fn trip_active_on_time(&self, trip: &Trip, time: &GtfsTime, within_hours: Option<i64>) -> bool {
+    pub fn trip_active_on_time(
+        &self,
+        trip: &Trip,
+        time: &GtfsTime,
+        within_hours: Option<i64>,
+    ) -> bool {
         if trip.service_id.is_none() {
             error!("Trip without service id! {}", trip.trip_short_name);
             return true;
@@ -172,31 +196,38 @@ impl GtfsData {
 
     pub fn route_active_on_day(&self, route_id: usize, day: &GtfsTime) -> bool {
         let route = self.get_route(route_id);
-        route.trips.iter().any(|&t| self.trip_id_active_on_time(t, &day, None))
+        route
+            .trips
+            .iter()
+            .any(|&t| self.trip_id_active_on_time(t, &day, None))
     }
 
-    pub fn trips_active_on_date_within_hours(&self, route_id: usize, time: &GtfsTime, within_h: i64) -> Vec<usize> {
+    pub fn trips_active_on_date_within_hours(
+        &self,
+        route_id: usize,
+        time: &GtfsTime,
+        within_h: i64,
+    ) -> Vec<usize> {
         let route = self.get_route(route_id);
-        route.trips
+        route
+            .trips
             .iter()
-            .filter(|&&t|
-                self.trip_id_active_on_time(t, time, Some(within_h)))
+            .filter(|&&t| self.trip_id_active_on_time(t, time, Some(within_h)))
             .cloned()
             .collect::<Vec<usize>>()
     }
 }
 
 #[cached(
-type = "SizedCache<(u64,u64, usize), Vec<usize>>",
-create = "{ SizedCache::with_size(5000) }",
-convert = r#"{ ((pos.lat * 1000.0) as u64 , (pos.lng * 1000.0) as u64,number) }"#
+    type = "SizedCache<(u64,u64, usize), Vec<usize>>",
+    create = "{ SizedCache::with_size(5000) }",
+    convert = r#"{ ((pos.lat * 1000.0) as u64 , (pos.lng * 1000.0) as u64,number) }"#
 )]
 pub fn near_stops(pos: &LatLng, number: usize, stops: &Vec<Stop>) -> Vec<usize> {
     let coord = pos.as_point();
     stops
         .iter()
-        .sorted_by_key(|stop|
-            (stop.stop_pos.as_point().euclidean_distance(&coord) * 1000.0) as i64)
+        .sorted_by_key(|stop| (stop.stop_pos.as_point().euclidean_distance(&coord) * 1000.0) as i64)
         .take(number)
         .map(|stop| stop.stop_id)
         .collect::<Vec<usize>>()
@@ -205,7 +236,7 @@ pub fn near_stops(pos: &LatLng, number: usize, stops: &Vec<Stop>) -> Vec<usize> 
 // contains a list of stops, and the time for each in seconds (the first has time 0)
 #[derive(Hash, Eq, Default, PartialEq, Debug, Serialize, Deserialize, Clone)]
 pub struct StopTimes {
-    pub stop_times_id : usize,
+    pub stop_times_id: usize,
     pub stop_times: Vec<StopTime>,
 }
 impl StopTimes {
@@ -262,8 +293,6 @@ pub struct Route {
     pub stop_times: BTreeSet<usize>,
 }
 
-
-
 #[derive(Debug, Default, Serialize, Deserialize, Clone)]
 pub struct Trip {
     pub route_id: usize,
@@ -289,21 +318,26 @@ pub struct GtfsTime {
 
 impl GtfsTime {
     pub fn new_from_midnight(time: i64) -> GtfsTime {
-        let ts = SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap().as_secs() as i64;
+        let ts = SystemTime::now()
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .unwrap()
+            .as_secs() as i64;
         let sec_since_midnight = Utc.timestamp(ts as i64, 0).num_seconds_from_midnight() as i64;
         let last_midnight = ts - sec_since_midnight;
 
         GtfsTime {
-            timestamp: last_midnight + time
+            timestamp: last_midnight + time,
         }
     }
 
     pub fn new_replacing_time(&self, seconds_from_midnight: i64) -> GtfsTime {
         GtfsTime {
-            timestamp: self.timestamp - (self.since_midnight() as i64) + seconds_from_midnight
+            timestamp: self.timestamp - (self.since_midnight() as i64) + seconds_from_midnight,
         }
     }
-    pub fn new_from_timestamp(timestamp: i64) -> GtfsTime { GtfsTime { timestamp } }
+    pub fn new_from_timestamp(timestamp: i64) -> GtfsTime {
+        GtfsTime { timestamp }
+    }
 
     pub fn new_infinite() -> GtfsTime {
         GtfsTime::new_from_timestamp(32503680000) // First January 3000
@@ -311,7 +345,10 @@ impl GtfsTime {
 
     pub fn from_date(yyyymmdd: &String) -> GtfsTime {
         let date = NaiveDate::parse_from_str(yyyymmdd, "%Y%m%d").unwrap();
-        let date = Utc.from_utc_date(&date).and_time(NaiveTime::from_hms(0, 0, 0)).unwrap();
+        let date = Utc
+            .from_utc_date(&date)
+            .and_time(NaiveTime::from_hms(0, 0, 0))
+            .unwrap();
         GtfsTime::new_from_timestamp(date.timestamp())
     }
 
@@ -349,7 +386,9 @@ impl GtfsTime {
     pub fn distance(&self, other: &GtfsTime) -> u64 {
         (self.timestamp - other.timestamp).abs() as u64
     }
-    pub fn timestamp(&self) -> i64 { self.timestamp }
+    pub fn timestamp(&self) -> i64 {
+        self.timestamp
+    }
 }
 
 impl fmt::Display for GtfsTime {
@@ -409,7 +448,8 @@ impl LatLng {
         Coordinate {
             x: self.lat,
             y: self.lng,
-        }.into()
+        }
+        .into()
     }
     pub fn distance_meters(&self, other: &LatLng) -> u64 {
         self.as_point().geodesic_distance(&other.as_point()) as u64

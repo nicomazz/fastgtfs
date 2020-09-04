@@ -1,4 +1,4 @@
-use criterion::{Criterion, criterion_group, criterion_main};
+use criterion::{criterion_group, criterion_main, Criterion};
 
 use fastgtfs::raw_parser::RawParser;
 use fastgtfs::test_utils::generate_serialized_data;
