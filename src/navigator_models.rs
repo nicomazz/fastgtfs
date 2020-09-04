@@ -35,12 +35,12 @@ impl Solution {
     pub(crate) fn set_last_component_start(&mut self, stop_id: usize) {
         if let Some(last) = self.components.last_mut() {
             if let SolutionComponent::Walk(w) = last {
-                w.stop_id = stop_id
+                w.from_stop_id = stop_id
             }
         }
     }
     pub(crate) fn add_walking_path(&mut self, stop_id: usize) {
-        let component = WalkSolutionComponent { stop_id };
+        let component = WalkSolutionComponent { from_stop_id: stop_id };
         self.set_last_component_start(stop_id);
         self.components.push(SolutionComponent::Walk(component));
     }
@@ -74,19 +74,20 @@ impl fmt::Display for SolutionComponent {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             SolutionComponent::Walk(_w) => {
-                writeln!(f, "Walk path")
+                writeln!(f, "Walk path").unwrap();
             }
             SolutionComponent::Bus(b) => {
-                writeln!(f, "Route {} - {} trip {} from {} ({}) to {} ({})",
+                writeln!(f, "Route {} - {} trip {} \nfrom {} ({}) to {} ({})",
                          b.route.route_long_name,
                          b.route.route_short_name,
                          b.trip.trip_id,
                          b.from_inx.unwrap(),
                          b.departure_time(),
                          b.to_inx.unwrap(),
-                         b.arrival_time())
+                         b.arrival_time()).unwrap();
             }
-        }
+        };
+        writeln!(f, "               ↓")
     }
 }
 
@@ -111,7 +112,7 @@ impl BusSolutionComponent {
 }
 #[derive(Debug, Default, Clone)]
 pub struct WalkSolutionComponent {
-    pub stop_id: usize,
+    pub from_stop_id: usize,
 }
 
 pub struct TimeUpdate {

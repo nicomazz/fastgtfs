@@ -355,12 +355,12 @@ impl RawParser {
 
         StopTimeInConstruction {
             trip_id,
-            stop_times: StopTimes { stop_times },
+            stop_times: StopTimes { stop_times_id: 0, stop_times },
             start_time,
         }
     }
 
-    fn add_stop_times(&mut self, stop_times: StopTimes) -> usize {
+    fn add_stop_times(&mut self, mut stop_times: StopTimes) -> usize {
         let stop_times_inserted = &mut self.stop_times_inserted;
         let selfstop_times = &self.dataset.stop_times;
         let number_of_stop_times = selfstop_times.len();
@@ -368,7 +368,7 @@ impl RawParser {
             stop_times_inserted.insert(stop_times.clone(), number_of_stop_times);
         }
         let new_id = *stop_times_inserted.get(&stop_times).unwrap();
-
+        stop_times.stop_times_id = new_id;
         /*        let new_id = **stop_times_inserted
         .get(&stop_times)
         .get_or_insert(&number_of_stop_times);*/

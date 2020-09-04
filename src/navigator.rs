@@ -7,8 +7,8 @@ use itertools::Itertools;
 use log::{debug, error, info, trace};
 use rayon::iter::{IntoParallelIterator, IntoParallelRefIterator, ParallelIterator};
 
-use crate::gtfs_data::{GtfsData, GtfsTime, LatLng, RouteId, Stop, StopDistance, StopId, StopIndex, Trip, TripId};
-use crate::navigator_models::{TimeUpdate, NavigationParams, Solution};
+use crate::gtfs_data::{GtfsData, GtfsTime, LatLng, RouteId, Stop, StopDistance, StopId, StopIndex, StopTimesId, Trip, TripId};
+use crate::navigator_models::{NavigationParams, Solution, TimeUpdate, SolutionComponent};
 use crate::navigator_models::SolutionComponent::Bus;
 
 type SolutionCallback = dyn FnMut(Solution) + Send + Sync + 'static;
@@ -77,8 +77,8 @@ pub struct BacktrackingInfo {
     /// we departed by this stop id to reach this new stop
     from_stop_id: StopId,
     /// `from_stop_id` was at this index inside the trip. This start-end index inside trip stops of this piece of solution
-    start_stop_inx: Option<StopIndex>,
-    end_index: Option<StopIndex>,
+    from_stop_inx: Option<StopIndex>,
+    to_stop_index: Option<StopIndex>,
 }
 
 impl BacktrackingInfo {
@@ -91,8 +91,8 @@ impl BacktrackingInfo {
             trip_id: None,
             route_id: None,
             from_stop_id,
-            start_stop_inx: None,
-            end_index: None,
+            from_stop_inx: None,
+            to_stop_index: None,
         }
     }
 }
@@ -147,6 +147,10 @@ impl<'a> RaptorNavigator<'a> {
         self.stops_near_destination_map = self.stops_near_destination_list.iter().copied().collect();
     }
 
+    fn send_solution(&mut self, solution: &Solution){
+        let callback = &mut *self.on_solution_found.lock().unwrap();
+        callback(solution.clone());
+    }
     /// does 3 searches, each time removing the trips of the precedent solutions
     pub fn find_path_multiple(&mut self, params: NavigationParams) {
         debug!("Navigation with param {:?} started", params);
@@ -162,6 +166,7 @@ impl<'a> RaptorNavigator<'a> {
             match self.best_stop {
                 Some(best_stop) => {
                     let sol = self.reconstruct_solution(best_stop, self.best_kth.unwrap());
+                    self.send_solution(&sol);
                     self.add_trips_to_banned(&sol);
                 }
                 None => {
@@ -178,21 +183,20 @@ impl<'a> RaptorNavigator<'a> {
         self.marked_stops.push(self.start_stop.stop_id);
         self.add_walking_path(0);
 
-        for hop in 1..self.navigation_params.max_changes {
-            trace!("---- hop {}", hop);
+        for hop_att in 1..self.navigation_params.max_changes {
+            trace!("---- hop {}", hop_att);
             // Let's get all the routespassing trougth the stops marked
             let route_stops_to_consider = self.build_route_stop();
             trace!("Considering {} route_stops", route_stops_to_consider.len());
 
             let updates = route_stops_to_consider
                 .into_par_iter()
-                .flat_map(|(route_id, stop_inx)|
-                    self.handle_route_stop(route_id, stop_inx, hop)
+                .flat_map(|((route_id, stop_times_id), stop_inx)|
+                    self.handle_routes_passing_in_stop(route_id, stop_times_id, stop_inx, hop_att)
                 ).collect();
-            self.perform_best_updates(updates, hop);
-
-
-            self.add_walking_path(hop);
+            self.perform_best_updates(updates, hop_att);
+            self.add_walking_path(hop_att);
+            self.validate_all_stops(hop_att);
         }
     }
 
@@ -210,6 +214,7 @@ impl<'a> RaptorNavigator<'a> {
             if destination_time < old_dest_stop_time {
                 self.update_best(to_stop_id, hop_att, destination_time);
                 self.p.insert((to_stop_id, hop_att), backtrack_info);
+                self.reconstruct_solution(to_stop_id,hop_att);
                 self.marked_stops.push(to_stop_id);
             }
         }
@@ -217,35 +222,53 @@ impl<'a> RaptorNavigator<'a> {
     }
 
 
+    /// A route contains several trips. Each of them can have different paths.
+    /// For this reason we need to return also the StopTimesId.
+    /// Usually, a route has a low number of different StopTimes (<5), so the output of this
+    /// function should have a size almost always < 5
+    fn get_all_routes_stop(&self, route_id: RouteId, stop_id: StopId) -> Vec<(RouteId, StopTimesId, StopIndex)> {
+        let stop_times = self.dataset.get_route_stop_times(route_id);
+
+        let res = stop_times.iter().filter_map(|stop_time| {
+            let stop_inx = stop_time.get_stop_inx(stop_id);
+            if let Some(stop_inx) = stop_inx {
+                Some((route_id, stop_time.stop_times_id, stop_inx))
+            } else {
+                None
+            }
+        }).collect_vec();
+
+        if res.is_empty() {
+            panic!("There should have been a stop inside this route id that matches. Check where the stops are assigned to routes!");
+        }
+        res
+    }
+
+    fn get_stop_routes_to_process(&self, stop: &Stop) -> Vec<(RouteId, StopTimesId, StopIndex)> {
+        stop.routes // We associate the stop index at each route that passes through this stop
+            .iter()
+            .filter(|r_id| self.active_trips.contains_key(r_id))
+            .flat_map(|&r_id| {
+                self.get_all_routes_stop(r_id, stop.stop_id)
+            }).collect::<Vec<(RouteId, StopTimesId, StopIndex)>>() // vec<(route_id, stop_inx)>
+    }
     /// This makes a list of routes that pass trough each marked stops.
     /// Those will be scanned later in handle_route_stop
-    fn build_route_stop(&mut self) -> BTreeMap<RouteId, StopIndex> { // route_id -> stop_inx
+    fn build_route_stop(&mut self) -> BTreeMap<(RouteId, StopTimesId), StopIndex> { // route_id -> stop_inx
         trace!("Building route stop");
         let now = Instant::now();
         let ds = &self.dataset;
-        let active_trips = &self.active_trips;
 
-        let all_route_stops: Vec<(RouteId, StopIndex)> = self.marked_stops.clone()
+        let all_route_stops: Vec<(RouteId, StopTimesId, StopIndex)> = self.marked_stops.clone()
             .into_par_iter()
             .map(|stop_id| ds.get_stop(stop_id))
             .flat_map(|stop|
-                          stop.routes // We associate the stop index at each route that passes through this stop
-                              .iter()
-                              .filter(|r_id| active_trips.contains_key(r_id))
-                              .map(|r_id| ds.get_route(*r_id))
-                              .filter_map(|route| {
-                                  let stop_inx = route.get_stop_inx(ds, stop.stop_id);
-                                  if stop_inx.is_none() {
-                                      error!("Route {} doesn't contain stop {}. You should handle multiple stop times per route!", route.route_short_name, stop.stop_name);
-                                      return None;
-                                  }
-                                  Some((route.route_id, stop_inx.unwrap()))
-                              }).collect::<Vec<(RouteId, StopIndex)>>() // vec<(route_id, stop_inx)>
+                self.get_stop_routes_to_process(stop)
             ).collect();
 
-        let mut routes_to_consider = BTreeMap::<RouteId, StopIndex>::new();
-        for (route_id, stop_inx) in all_route_stops {
-            let prec_stop_inx = routes_to_consider.entry(route_id).or_insert_with(|| stop_inx);
+        let mut routes_to_consider = BTreeMap::<(RouteId, StopTimesId), StopIndex>::new();
+        for (route_id, stop_times_id, stop_inx) in all_route_stops {
+            let prec_stop_inx = routes_to_consider.entry((route_id, stop_times_id)).or_insert_with(|| stop_inx);
             *prec_stop_inx = min(*prec_stop_inx, stop_inx);
         }
 
@@ -255,9 +278,13 @@ impl<'a> RaptorNavigator<'a> {
     }
 
 
-    fn handle_route_stop(&self, route_id: usize, _start_stop_inx: usize, hop_att: Round) -> Vec<TimeUpdate> { // returns new best solutions
+    fn handle_routes_passing_in_stop(&self,
+                                     route_id: RouteId,
+                                     stop_times_id: StopTimesId,
+                                     _start_stop_inx: StopIndex,
+                                     hop_att: Round) -> Vec<TimeUpdate> {
         let _route = self.dataset.get_route(route_id);
-        let stop_times = &self.dataset.get_route_stop_times(route_id).first().unwrap().stop_times;
+        let stop_times = &self.dataset.get_stop_times(stop_times_id).stop_times;
         //trace!("considering route {} start_stop_inx {}/{}", route.route_long_name, start_stop_inx, stop_times.len());
         let mut start_stop_inx = _start_stop_inx;
         let mut start_stop_id = stop_times[start_stop_inx].stop_id;
@@ -297,8 +324,8 @@ impl<'a> RaptorNavigator<'a> {
                             trip_id: Some(trip_id),
                             route_id: Some(route_id),
                             from_stop_id: start_stop_id,
-                            start_stop_inx: Some(start_stop_inx),
-                            end_index: Some(att_stop_inx),
+                            from_stop_inx: Some(start_stop_inx),
+                            to_stop_index: Some(att_stop_inx),
                         },
                     });
                 } else {
@@ -317,7 +344,9 @@ impl<'a> RaptorNavigator<'a> {
                     self.active_trips.get(&route_id).unwrap(),
                     att_stop_id,
                     &prec_time_in_stop,
-                    att_stop_inx, &self.banned_trip_ids); // todo use excluded trips
+                    att_stop_inx,
+                    stop_times_id,
+                    &self.banned_trip_ids);
 
                 if new_trip.is_none() {
                     continue;
@@ -327,6 +356,7 @@ impl<'a> RaptorNavigator<'a> {
                 if self.banned_trip_ids.contains(&new_trip.trip_id) {
                     panic!("Returned a trip in the banned list!");
                 }
+                // let's allign to this new trip
                 let trip_stop_inx = max(att_stop_inx, trip_stop_inx);
                 let arriving_time_with_new_trip =
                     self.new_time(new_trip.start_time + stop_times[trip_stop_inx].time);
@@ -339,8 +369,12 @@ impl<'a> RaptorNavigator<'a> {
                 }
                 if trip.is_none() || arriving_time_with_new_trip < arriving_time_with_old_trip {
                     //  debug!("Setting new trip!");
+                    assert!(arriving_time_with_new_trip >= self.tbest.get(&curr_stop.stop_id).unwrap().clone());
                     trip = Some(new_trip.trip_id);
                     _att_stop_inx = trip_stop_inx;
+
+                    start_stop_inx = trip_stop_inx;
+                    start_stop_id = att_stop_id;
 
                     time_delta_change = arriving_time_with_new_trip.distance(&prec_time_in_stop);
                 } else if new_trip.trip_id == trip.unwrap() {
@@ -364,9 +398,9 @@ impl<'a> RaptorNavigator<'a> {
         self.navigation_params.start_time.new_replacing_time(seconds_since_midnight)
     }
 
-    fn update_best(&mut self, stop_id: usize, hop: Round, new_time: GtfsTime) {
-        assert!(*self.t.get(&(stop_id, hop)).unwrap_or(&GtfsTime::new_infinite()) > new_time);
-        self.t.insert((stop_id, hop), new_time.clone());
+    fn update_best(&mut self, stop_id: usize, hop_att: Round, new_time: GtfsTime) {
+        assert!(*self.t.get(&(stop_id, hop_att)).unwrap_or(&GtfsTime::new_infinite()) > new_time);
+        self.t.insert((stop_id, hop_att), new_time.clone());
         let prec_absolute_best =
             self.tbest
                 .entry(stop_id)
@@ -379,9 +413,9 @@ impl<'a> RaptorNavigator<'a> {
 
         if self.stops_near_destination_map.contains(&stop_id)
             && (new_time < self.best_destination_time ||
-            (new_time == self.best_destination_time && hop < self.best_kth.unwrap_or(u8::max_value()))) {
+            (new_time == self.best_destination_time && hop_att < self.best_kth.unwrap_or(u8::max_value()))) {
             self.best_destination_time = new_time;
-            self.best_kth = Some(hop);
+            self.best_kth = Some(hop_att);
             self.best_stop = Some(stop_id);
         }
     }
@@ -447,14 +481,19 @@ impl<'a> RaptorNavigator<'a> {
         trace!("Time to process walking paths: {} ms. Final number of marked stops: {}", now.elapsed().as_millis(), self.marked_stops.len());
     }
 
-    fn reconstruct_solution(&mut self, stop_id: usize, hop_att: Round) -> Solution {
-        debug!("Reconstructing a solution!");
+
+
+
+    fn reconstruct_solution(&self, stop_id: usize, hop_att: Round) -> Solution {
+       // debug!("Reconstructing a solution!");
         let mut solution: Solution = Default::default();
         solution.start_time = (&self.navigation_params.start_time).clone();
 
         let mut att_stop = stop_id;
         let mut att_kth = hop_att;
         let start_stop = self.start_stop.stop_id;
+
+        let mut upper_time = self.t.get(&(stop_id,hop_att)).unwrap().clone();
 
         // we reconstruct the solution from the last component to the first
         while att_stop != start_stop {
@@ -480,19 +519,28 @@ impl<'a> RaptorNavigator<'a> {
             let prec_route = self.dataset.get_route(prec_route_id);
             let path = self.dataset.get_stop_times(prec_trip.stop_times_id);
 
+            // Addititonal check
+            let start_inx = backtrack_info.from_stop_inx.unwrap();
+            let time_at_start_inx = self.new_time(path.stop_times[start_inx].time + prec_trip.start_time);
+
+
+
             solution.add_bus_path(att_stop,
                                   prec_route,
                                   prec_trip,
                                   path,
-                                  backtrack_info.start_stop_inx.unwrap(),
-                                  backtrack_info.end_index.unwrap());
+                                  backtrack_info.from_stop_inx.unwrap(),
+                                  backtrack_info.to_stop_index.unwrap());
+
+            assert!(upper_time >= time_at_start_inx,format!("upper: {}, start {}, Wrong solution: {}",upper_time, time_at_start_inx,&solution));
+            upper_time = time_at_start_inx;
+
             att_stop = prec_stop;
             att_kth -= 1;
         }
         solution.set_last_component_start(self.start_stop.stop_id);
         solution.complete();
-        let callback = &mut *self.on_solution_found.lock().unwrap();
-        callback(solution.clone());
+
         solution
     }
 
@@ -515,6 +563,32 @@ impl<'a> RaptorNavigator<'a> {
             .collect();
 
         debug!("routes active today: {}/{}. calculated in: {}", self.active_trips.len(), self.dataset.routes.len(), now.elapsed().as_millis());
+    }
+
+    // scans all the stops in `t` , and tries to reconstruct the chain up until the start stop for each one
+    fn validate_all_stops(&self, hop_att: u8) {
+        let ds = self.dataset;
+
+        ds.stops.iter()
+            .filter(|stop| self.t.contains_key(&(stop.stop_id, hop_att)))
+            .for_each(|stop| {
+                let sol = self.reconstruct_solution(stop.stop_id,hop_att);
+                RaptorNavigator::validate_solution(&sol, &self.navigation_params.start_time);
+
+        })
+
+    }
+
+
+
+    fn validate_solution(sol: &Solution, start_time : &GtfsTime) {
+        let mut last_time = start_time.clone();
+        for component in &sol.components {
+            if let SolutionComponent::Bus(b) = component {
+                assert!(last_time <= b.departure_time(),format!("Wrong solution: {}",&sol)); // todo fix this
+                last_time = b.arrival_time();
+            }
+        }
     }
 }
 

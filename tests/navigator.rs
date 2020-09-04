@@ -6,7 +6,7 @@ use chrono::NaiveDate;
 use fastgtfs::gtfs_data::GtfsTime;
 
 fn default_start_time() -> GtfsTime {
-    let start_timestamp = NaiveDate::from_ymd(2020, 08, 30).and_hms(17, 33, 44).timestamp();
+    let start_timestamp = NaiveDate::from_ymd(2020, 08, 30).and_hms(13, 30, 00).timestamp();
     GtfsTime::new_from_timestamp(start_timestamp)
 }
 
@@ -62,7 +62,7 @@ mod tests {
             let mut last_time = default_start_time();
             for component in &sol.components {
                 if let SolutionComponent::Bus(b) = component {
-                    //assert!(last_time <= b.departure_time()); // todo fix this
+                    assert!(last_time <= b.departure_time()); // todo fix this
                     last_time = b.arrival_time();
                 }
             }

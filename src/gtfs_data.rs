@@ -61,6 +61,7 @@ impl GtfsData {
 
     pub fn get_route_stop_times(&self, route_id: usize) -> Vec<&StopTimes> {
         let route = self.get_route(route_id);
+        // There are the stop times of the route's trips, without duplicates
         route.stop_times.iter().map(|&st| self.get_stop_times(st)).collect()
     }
 
@@ -68,7 +69,13 @@ impl GtfsData {
     /// We make the `almost right` assumption that all the trips are from the same route id, and that they all share the same stop_time.
     /// This is true most of the times.
     /// TODO: handle this correctly
-    pub fn trip_after_time(&self, trips: &[TripId], stop_id: StopId, min_time: &GtfsTime, start_stop_inx: StopIndex, banned_trip_ids: &HashSet<TripId>) -> Option<(&Trip, StopIndex)> {
+    pub fn trip_after_time(&self,
+                           trips: &[TripId],
+                           stop_id: StopId,
+                           min_time: &GtfsTime,
+                           start_stop_inx: StopIndex,
+                           stop_times_id: StopTimesId,
+                           banned_trip_ids: &HashSet<TripId>) -> Option<(&Trip, StopIndex)> {
         if trips.is_empty() { return None; }
 
         let first_trip = self.get_trip(*trips.first().unwrap());
@@ -87,13 +94,14 @@ impl GtfsData {
         trips.iter()
             .filter(|t_id| !banned_trip_ids.contains(t_id))
             .map(|t_id| self.get_trip(*t_id))
-            .filter(|t| self.trip_active_on_time(t, min_time, None) &&
-                    t.start_time + trips_duration >= min_time.since_midnight() as i64)
+            .filter(|t| t.stop_times_id == stop_times_id &&
+                self.trip_active_on_time(t, min_time, None) &&
+                t.start_time + trips_duration >= min_time.since_midnight() as i64)
             .find_map(|trip| { // this returns the first for which the content is an Ok result
                 inxes_for_stop
                     .iter()
-                    .filter(|&&inx| stop_times[inx].time + trip.start_time >= min_time.since_midnight() as i64)
-                    .map(|inx| (trip, *inx))
+                    .filter(|&&inx| stop_times[inx].time + trip.start_time > min_time.since_midnight() as i64)
+                    .map(|&inx| (trip, inx))
                     .next()
             })
     }
@@ -197,7 +205,16 @@ pub fn near_stops(pos: &LatLng, number: usize, stops: &Vec<Stop>) -> Vec<usize> 
 // contains a list of stops, and the time for each in seconds (the first has time 0)
 #[derive(Hash, Eq, Default, PartialEq, Debug, Serialize, Deserialize, Clone)]
 pub struct StopTimes {
+    pub stop_times_id : usize,
     pub stop_times: Vec<StopTime>,
+}
+impl StopTimes {
+    pub fn get_stop_inx(&self, stop_id: StopId) -> Option<usize> {
+        self.stop_times
+            .iter()
+            .map(|stop_time| stop_time.stop_id)
+            .position(|s| s == stop_id)
+    }
 }
 
 #[derive(Hash, Eq, PartialEq, Debug, Serialize, Deserialize, Clone)]
@@ -245,18 +262,7 @@ pub struct Route {
     pub stop_times: BTreeSet<usize>,
 }
 
-impl Route {
-    // TODO: it should be considered that a route might have several different trips
-    pub fn get_stop_inx(&self, ds: &GtfsData, stop_id: usize) -> Option<usize> {
-        assert_ne!(self.trips.len(), 0);
-        // TODO handle multiple stop times per route
-        let stop_times = *ds.get_route_stop_times(self.route_id).first().unwrap();
-        stop_times.stop_times
-            .iter()
-            .map(|stop_time| stop_time.stop_id)
-            .position(|s| s == stop_id)
-    }
-}
+
 
 #[derive(Debug, Default, Serialize, Deserialize, Clone)]
 pub struct Trip {
@@ -314,7 +320,7 @@ impl GtfsTime {
         self.timestamp = (other.timestamp as u64 - other.since_midnight() + since_midnight) as i64;
     }
 
-    pub fn add_seconds(&mut self, sec: u64) -> &GtfsTime{
+    pub fn add_seconds(&mut self, sec: u64) -> &GtfsTime {
         self.timestamp += sec as i64;
         self
     }
