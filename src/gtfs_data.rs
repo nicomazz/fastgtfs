@@ -16,6 +16,8 @@ use log::error;
 use serde::{Deserialize, Serialize};
 
 use self::serde::export::Formatter;
+use rayon::iter::IntoParallelRefIterator;
+use rayon::iter::ParallelIterator;
 
 #[derive(Debug, Default, Serialize, Deserialize)]
 pub struct GtfsData {
@@ -124,7 +126,7 @@ impl GtfsData {
         let coord = pos.as_point();
         let item = self
             .stops
-            .iter()
+            .par_iter()
             .min_by_key(|s| s.stop_pos.as_point().geodesic_distance(&coord) as i64);
         item.unwrap()
     }
@@ -132,7 +134,7 @@ impl GtfsData {
     pub fn get_stops_in_range(&self, pos: LatLng, meters: f64) -> Vec<usize> {
         let coord = pos.as_point();
         self.stops
-            .iter()
+            .par_iter()
             .filter(|&stop| stop.stop_pos.as_point().geodesic_distance(&coord) < meters)
             .map(|s| s.stop_id)
             .collect::<Vec<usize>>()
