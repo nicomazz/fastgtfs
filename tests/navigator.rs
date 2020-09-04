@@ -18,7 +18,7 @@ mod tests {
 
     use log::debug;
 
-    use fastgtfs::gtfs_data::LatLng;
+    use fastgtfs::gtfs_data::{GtfsData, LatLng};
     use fastgtfs::navigator::RaptorNavigator;
     use fastgtfs::navigator_models::{NavigationParams, Solution, SolutionComponent};
     use fastgtfs::raw_parser::RawParser;
@@ -43,16 +43,7 @@ mod tests {
         assert!(seconds_1_km < 60 * 60 / 2); // faster than 2 km/h
     }
 
-    #[test]
-    fn test_navigator() {
-        init();
-
-        let test_paths = get_test_paths();
-        let mut parser = RawParser::new(test_paths);
-        parser.ensure_data_serialized_created();
-        let dataset = RawParser::read_preprocessed_data_from_default();
-        trace!("Dataset parsed!");
-
+    fn do_navigate(ds: &GtfsData) {
         //let (tx, rx): (Sender<Solution>, Receiver<Solution>) = mpsc::channel();
         let sol_cnt = Arc::new(Mutex::new(0));
         let sol_cnt_2 = Arc::clone(&sol_cnt);
@@ -69,7 +60,7 @@ mod tests {
             }
         });
 
-        let mut navigator = RaptorNavigator::new(&dataset, on_solution);
+        let mut navigator = RaptorNavigator::new(ds, on_solution);
 
         let venice = LatLng {
             lat: 45.437771117019466,
@@ -90,5 +81,17 @@ mod tests {
         navigator.find_path_multiple(params);
 
         assert_eq!(*sol_cnt.lock().unwrap(), 3);
+    }
+
+    #[test]
+    fn test_navigator() {
+        init();
+
+        let test_paths = get_test_paths();
+        let mut parser = RawParser::new(test_paths);
+        parser.ensure_data_serialized_created();
+        let dataset = RawParser::read_preprocessed_data_from_default();
+        trace!("Dataset parsed!");
+        (0..10).for_each(|_| do_navigate(&dataset));
     }
 }

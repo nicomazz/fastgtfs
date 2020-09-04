@@ -121,12 +121,25 @@ impl<'a> RaptorNavigator<'a> {
     }
 
     fn init_navigation(&mut self, params: &NavigationParams) {
+        let now = Instant::now();
         self.navigation_params = params.clone();
 
-        self.start_stop = self.dataset.find_nearest_stop(&params.from).clone();
-        self.end_stop = self.dataset.find_nearest_stop(&params.to).clone();
+        // todo
+        let start_end_stops = &[&params.from, &params.to]
+            .to_vec()
+            .into_par_iter()
+            .map(|pos| self.dataset.find_nearest_stop(pos))
+            .collect::<Vec<&Stop>>();
+        self.start_stop = start_end_stops[0].clone();
+        self.end_stop = start_end_stops[1].clone();
+
         self.compute_trips_active_today(&params.start_time);
         self.compute_stops_near_destination(self.end_stop.stop_pos.clone());
+
+        info!(
+            "Init navigation finished in: {} ms",
+            now.elapsed().as_millis()
+        );
     }
 
     fn clear_partial(&mut self) {
@@ -174,7 +187,7 @@ impl<'a> RaptorNavigator<'a> {
                 None => error!("No solution found at {}-th navigagtion", ith_navigation),
             }
         }
-        trace!("Navigation finished in: {} ms", now.elapsed().as_millis());
+        info!("Navigation finished in: {} ms", now.elapsed().as_millis());
     }
 
     /// Does |navigation_params.max_changes| passes
@@ -201,7 +214,8 @@ impl<'a> RaptorNavigator<'a> {
                 .collect();
             self.perform_best_updates(updates, hop_att);
             self.add_walking_path(hop_att);
-            self.validate_all_stops(hop_att);
+            // used for debugging purposes
+            // self.validate_all_stops(hop_att);
         }
     }
 
@@ -213,9 +227,6 @@ impl<'a> RaptorNavigator<'a> {
                 backtrack_info,
             } = update;
 
-            //let mut destination_time = original_best_times.get(&from_stop_id).unwrap_or(&GtfsTime::new_infinite()).clone();
-            //destination_time.add_seconds(cost_seconds);
-
             // pruning: if this can't improve the best solution, just continue
             if self.only_best && self.best_destination_time <= destination_time {
                 return;
@@ -225,7 +236,6 @@ impl<'a> RaptorNavigator<'a> {
             if destination_time < old_dest_stop_time {
                 self.update_best(to_stop_id, hop_att, destination_time);
                 self.p.insert((to_stop_id, hop_att), backtrack_info);
-                self.reconstruct_solution(to_stop_id, hop_att);
                 self.marked_stops.push(to_stop_id);
             }
         }
@@ -530,15 +540,24 @@ impl<'a> RaptorNavigator<'a> {
 
                 near_stops_with_distance
                     .iter()
-                    .map(|sd| {
+                    .filter_map(|sd| {
                         let to_stop_id = sd.stop_id;
                         let cost = RaptorNavigator::seconds_by_walk(sd.distance_meters);
                         let destination_time =
                             from_stop_best_time.clone().add_seconds(cost).clone();
-                        TimeUpdate {
-                            to_stop_id,
-                            destination_time,
-                            backtrack_info: BacktrackingInfo::new_walking_info(from_stop_id),
+                        if destination_time
+                            < tbest
+                                .get(&(to_stop_id))
+                                .unwrap_or(&GtfsTime::new_infinite())
+                                .clone()
+                        {
+                            Some(TimeUpdate {
+                                to_stop_id,
+                                destination_time,
+                                backtrack_info: BacktrackingInfo::new_walking_info(from_stop_id),
+                            })
+                        } else {
+                            None
                         }
                     })
                     .collect_vec()
@@ -657,7 +676,7 @@ impl<'a> RaptorNavigator<'a> {
     }
 
     // scans all the stops in `t` , and tries to reconstruct the chain up until the start stop for each one
-    fn validate_all_stops(&self, hop_att: u8) {
+    fn _validate_all_stops(&self, hop_att: u8) {
         let ds = self.dataset;
 
         ds.stops

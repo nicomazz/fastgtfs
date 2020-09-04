@@ -134,12 +134,14 @@ fn test_routes_per_stop() {
 fn test_vector_equality() {
     let mut map: HashMap<StopTimes, usize> = HashMap::new();
     let v1 = StopTimes {
+        stop_times_id: 0,
         stop_times: vec![StopTime {
             stop_id: 1,
             time: 1,
         }],
     };
     let v2 = StopTimes {
+        stop_times_id: 0,
         stop_times: vec![StopTime {
             stop_id: 1,
             time: 1,
