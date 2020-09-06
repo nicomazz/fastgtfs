@@ -1,0 +1,18 @@
+[package]
+name = "walk_distance_calculator"
+version = "0.1.0"
+authors = ["nicomazz <nicomazz97@gmail.com>"]
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+reqwest = { version = "0.10.8", features = ["blocking"] }
+fastgtfs = { version = "0.1.0", path = "../"}
+itertools = "0.9.0"
+rayon = "1.1"
+serde = { version = "1.0.114", features = ["derive"] }
+serde_json = "1.0"
+flexbuffers = "0.1.1"
+
+[workspace]

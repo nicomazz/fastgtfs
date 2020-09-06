@@ -1,6 +1,6 @@
 use std::collections::{BTreeSet, HashMap, HashSet};
 use std::fs::File;
-use std::io::{Error, Read};
+use std::io::Read;
 use std::path::Path;
 use std::time::Instant;
 use std::{env, fs};

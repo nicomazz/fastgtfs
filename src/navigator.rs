@@ -82,6 +82,7 @@ pub struct BacktrackingInfo {
     /// `from_stop_id` was at this index inside the trip. This start-end index inside trip stops of this piece of solution
     from_stop_inx: Option<StopIndex>,
     to_stop_index: Option<StopIndex>,
+    distance: Option<u64>, // meters
 }
 
 impl BacktrackingInfo {
@@ -89,13 +90,14 @@ impl BacktrackingInfo {
         self.trip_id.is_none()
     }
 
-    fn new_walking_info(from_stop_id: StopId) -> BacktrackingInfo {
+    fn new_walking_info(from_stop_id: StopId, distance: u64) -> BacktrackingInfo {
         BacktrackingInfo {
             trip_id: None,
             route_id: None,
             from_stop_id,
             from_stop_inx: None,
             to_stop_index: None,
+            distance: Some(distance),
         }
     }
 }
@@ -368,6 +370,7 @@ impl<'a> RaptorNavigator<'a> {
                             from_stop_id: start_stop_id,
                             from_stop_inx: Some(start_stop_inx),
                             to_stop_index: Some(att_stop_inx),
+                            distance: None,
                         },
                     });
                 } else {
@@ -558,7 +561,10 @@ impl<'a> RaptorNavigator<'a> {
                             Some(TimeUpdate {
                                 to_stop_id,
                                 destination_time,
-                                backtrack_info: BacktrackingInfo::new_walking_info(from_stop_id),
+                                backtrack_info: BacktrackingInfo::new_walking_info(
+                                    from_stop_id,
+                                    sd.distance_meters as u64,
+                                ),
                             })
                         } else {
                             None
@@ -580,7 +586,7 @@ impl<'a> RaptorNavigator<'a> {
     fn reconstruct_solution(&self, stop_id: usize, hop_att: Round) -> Solution {
         // debug!("Reconstructing a solution!");
         let mut solution: Solution = Default::default();
-        solution.start_time = (&self.navigation_params.start_time).clone();
+        solution.navigation_start_time = (&self.navigation_params.start_time).clone();
 
         let mut att_stop = stop_id;
         let mut att_kth = hop_att;
@@ -603,7 +609,7 @@ impl<'a> RaptorNavigator<'a> {
             let prec_stop = backtrack_info.from_stop_id;
 
             if backtrack_info.is_walking_path() {
-                solution.add_walking_path(att_stop);
+                solution.add_walking_path(att_stop, backtrack_info.distance.unwrap() as usize);
                 att_stop = prec_stop;
                 continue;
             }
