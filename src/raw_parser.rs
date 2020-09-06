@@ -80,7 +80,7 @@ mod gtfs_serializer {
             v.serialize(&mut buffer).unwrap();
             let out_file_name = &format!("{}/{}", out_path, name);
             let mut output_file = File::create(out_file_name)
-                .unwrap_or_else(|_| panic!("Can't create {}", out_file_name));
+                .unwrap_or_else(|e| panic!("Can't create {}, {}", out_file_name, e));
             output_file.write_all(buffer.view()).unwrap();
         })
     }
