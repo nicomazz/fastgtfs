@@ -1,6 +1,6 @@
 use std::collections::{BTreeSet, HashMap, HashSet};
 use std::fs::File;
-use std::io::Read;
+use std::io::{Error, Read};
 use std::path::Path;
 use std::time::Instant;
 use std::{env, fs};
@@ -236,10 +236,12 @@ impl RawParser {
         let destination_folder = &format!("{}/{}", path, out_folder);
         if !Path::new(destination_folder).exists() {
             println!("Creating output path!");
-            fs::create_dir_all(destination_folder).expect(&format!(
-                "Can't create output folder {}",
-                destination_folder
-            ));
+            match fs::create_dir_all(destination_folder) {
+                Ok(_) => {}
+                Err(e) => {
+                    panic!("Can't create output folder {}, {}", destination_folder, e);
+                }
+            }
         }
         println!("Creating serialized data!");
         self.parse();
