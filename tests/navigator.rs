@@ -14,7 +14,8 @@ fn default_start_time() -> GtfsTime {
 
 #[cfg(test)]
 mod tests {
-    use std::sync::{Arc, Mutex};
+    use std::sync::mpsc::{Receiver, Sender};
+    use std::sync::{mpsc, Arc, Mutex};
 
     use log::debug;
 
@@ -25,6 +26,7 @@ mod tests {
     use fastgtfs::test_utils::get_test_paths;
 
     use crate::default_start_time;
+    use std::thread;
 
     fn init() {
         let _ = env_logger::builder()
@@ -43,46 +45,6 @@ mod tests {
         assert!(seconds_1_km < 60 * 60 / 2); // faster than 2 km/h
     }
 
-    fn do_navigate(ds: &GtfsData) {
-        //let (tx, rx): (Sender<Solution>, Receiver<Solution>) = mpsc::channel();
-        let sol_cnt = Arc::new(Mutex::new(0));
-        let sol_cnt_2 = Arc::clone(&sol_cnt);
-        let on_solution = Box::new(move |sol: Solution| {
-            debug!("A SOLUTION HAS BEEN RECEIVED! {}", sol);
-            let mut cnt = sol_cnt_2.lock().unwrap();
-            *cnt += 1;
-            let mut last_time = default_start_time();
-            for component in &sol.components {
-                if let SolutionComponent::Bus(b) = component {
-                    assert!(last_time <= b.departure_time()); // todo fix this
-                    last_time = b.arrival_time();
-                }
-            }
-        });
-
-        let mut navigator = RaptorNavigator::new(ds, on_solution);
-
-        let venice = LatLng {
-            lat: 45.437771117019466,
-            lng: 12.31865644454956,
-        };
-        let nave_de_vero = LatLng {
-            lat: 45.45926209023005,
-            lng: 12.21256971359253,
-        };
-
-        let params = NavigationParams {
-            from: venice,
-            to: nave_de_vero,
-            max_changes: 3,
-            start_time: default_start_time(),
-            num_solutions_to_find: 3,
-        };
-        navigator.find_path_multiple(params);
-
-        assert_eq!(*sol_cnt.lock().unwrap(), 3);
-    }
-
     #[test]
     fn test_navigator() {
         init();
@@ -92,6 +54,38 @@ mod tests {
         parser.ensure_data_serialized_created();
         let dataset = RawParser::read_preprocessed_data_from_default();
         trace!("Dataset parsed!");
-        (0..10).for_each(|_| do_navigate(&dataset));
+
+        let (tx, rx): (Sender<Solution>, Receiver<Solution>) = mpsc::channel();
+        thread::spawn(move || {
+            let mut navigator = RaptorNavigator::new(&dataset, Arc::new(Mutex::new(tx)));
+
+            let venice = LatLng {
+                lat: 45.437771117019466,
+                lng: 12.31865644454956,
+            };
+            let nave_de_vero = LatLng {
+                lat: 45.45926209023005,
+                lng: 12.21256971359253,
+            };
+
+            let params = NavigationParams {
+                from: venice,
+                to: nave_de_vero,
+                max_changes: 3,
+                start_time: default_start_time(),
+                num_solutions_to_find: 3,
+            };
+            navigator.find_path_multiple(params);
+        });
+
+        let mut sol_cnt = 0;
+        for sol in rx {
+            debug!("A SOLUTION HAS BEEN RECEIVED! {}", sol);
+            sol_cnt += 1;
+            let last_time = default_start_time();
+            RaptorNavigator::validate_solution(&sol, &last_time);
+        }
+
+        assert_eq!(sol_cnt, 3);
     }
 }

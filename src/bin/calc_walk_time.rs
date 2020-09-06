@@ -71,7 +71,7 @@ fn do_request(url: String) -> String {
 }
 
 fn here_distance_request(from: LatLng, tos: Vec<LatLng>) -> Result<Vec<Option<usize>>, Error> {
-    let api_key = env::var("here_api_key").unwrap();
+    let api_key = env::var("HERE_APIKEY").unwrap();
 
     let start_get_param = format!("start0={},{}", from.lat, from.lng);
     let destinations_get_param = tos

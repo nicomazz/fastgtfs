@@ -13,11 +13,14 @@ use crate::gtfs_data::{
 };
 use crate::navigator_models::SolutionComponent::Bus;
 use crate::navigator_models::{NavigationParams, Solution, SolutionComponent, TimeUpdate};
+use std::sync::mpsc::Sender;
 
-type SolutionCallback = dyn FnMut(Solution) + Send + Sync + 'static;
+//type SolutionCallback = dyn FnMut(Solution) + Send + Sync + 'static;
+type SolutionCallback = Arc<Mutex<Sender<Solution>>>;
 
 pub struct RaptorNavigator<'a> {
-    on_solution_found: Arc<Mutex<SolutionCallback>>, //Sender<Solution>,
+    //on_solution_found: Arc<Mutex<SolutionCallback>>, //Sender<Solution>,
+    on_solution_found: SolutionCallback, //Sender<Solution>,
 
     start_stop: Stop,
     end_stop: Stop,
@@ -98,7 +101,7 @@ impl BacktrackingInfo {
 }
 
 impl<'a> RaptorNavigator<'a> {
-    pub fn new(dataset: &GtfsData, on_solution_found: Box<SolutionCallback>) -> RaptorNavigator {
+    pub fn new(dataset: &GtfsData, on_solution_found: SolutionCallback) -> RaptorNavigator {
         RaptorNavigator {
             dataset,
             start_stop: Default::default(),
@@ -114,7 +117,7 @@ impl<'a> RaptorNavigator<'a> {
             best_stop: None,
             best_kth: None,
             best_destination_time: GtfsTime::new_infinite(),
-            on_solution_found: Arc::new(Mutex::new(on_solution_found)),
+            on_solution_found,
             banned_trip_ids: Default::default(),
             active_trips: Default::default(),
         }
@@ -159,8 +162,9 @@ impl<'a> RaptorNavigator<'a> {
     }
 
     fn send_solution(&mut self, solution: &Solution) {
-        let callback = &mut *self.on_solution_found.lock().unwrap();
-        callback(solution.clone());
+        let callback = self.on_solution_found.lock().unwrap();
+        //callback(solution.clone());
+        callback.send(solution.clone()).unwrap();
     }
     /// does 3 searches, each time removing the trips of the precedent solutions
     pub fn find_path_multiple(&mut self, params: NavigationParams) {
@@ -688,7 +692,7 @@ impl<'a> RaptorNavigator<'a> {
             })
     }
 
-    fn validate_solution(sol: &Solution, start_time: &GtfsTime) {
+    pub fn validate_solution(sol: &Solution, start_time: &GtfsTime) {
         let mut last_time = start_time.clone();
         for component in &sol.components {
             if let SolutionComponent::Bus(b) = component {
