@@ -10,8 +10,7 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  env:
-    HERE_APIKEY: ${{secrets.HERE_APIKEY}}
+
   build:
     runs-on: ubuntu-latest
     steps:
@@ -22,5 +21,7 @@ jobs:
       run: cd test_data/ && ./download_test_data.sh && cd -
     - name: Run tests
       run: cargo test --verbose
+      env:
+        HERE_APIKEY: ${{secrets.HERE_APIKEY}}
     - name: Upload release (if needed)
       run: test_data/do_release.sh ${{secrets.SECRET_API}}

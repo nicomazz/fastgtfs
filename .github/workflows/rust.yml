@@ -22,3 +22,5 @@ jobs:
       run: cd test_data/ && ./download_test_data.sh && cd -
     - name: Run tests
       run: cargo test --verbose
+      env:
+        HERE_APIKEY: ${{secrets.HERE_APIKEY}}
