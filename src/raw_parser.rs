@@ -1,9 +1,9 @@
 use std::collections::{BTreeSet, HashMap, HashSet};
-use std::fs;
 use std::fs::File;
 use std::io::Read;
 use std::path::Path;
 use std::time::Instant;
+use std::{env, fs};
 
 use geo::algorithm::geodesic_distance::GeodesicDistance;
 use itertools::Itertools;
@@ -228,6 +228,10 @@ impl RawParser {
     }
 
     pub fn generate_serialized_data(&mut self, out_folder: &str) {
+        println!(
+            "Generating serialized data at path: {}",
+            env::current_dir().unwrap().to_str().unwrap()
+        );
         let path = self.paths.first().unwrap();
         let destination_folder = &format!("{}/{}", path, out_folder);
         if !Path::new(destination_folder).exists() {
