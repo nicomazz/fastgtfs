@@ -19,8 +19,6 @@ jobs:
       run: cargo build --verbose
     - name: download dataset
       run: cd test_data/ && ./download_test_data.sh && cd -
-    - name: Parse Data
-      run: cargo run --bin parse_gtfs_data
     - name: Run tests
       run: cargo test --verbose
       env:
