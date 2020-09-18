@@ -13,11 +13,11 @@ use geo::algorithm::geodesic_distance::GeodesicDistance;
 use geo::{Coordinate, Point};
 use itertools::Itertools;
 use log::error;
+use rayon::iter::IntoParallelRefIterator;
+use rayon::iter::ParallelIterator;
 use serde::{Deserialize, Serialize};
 
 use self::serde::export::Formatter;
-use rayon::iter::IntoParallelRefIterator;
-use rayon::iter::ParallelIterator;
 
 #[derive(Debug, Default, Serialize, Deserialize)]
 pub struct GtfsData {
@@ -68,6 +68,10 @@ impl GtfsData {
             .iter()
             .map(|&st| self.get_stop_times(st))
             .collect()
+    }
+
+    pub fn get_shape(&self, id: usize) -> &Shape {
+        &self.shapes[id]
     }
 
     /// returns the first trip that has `stop` (with inx after `start_stop_inx`) after time (not in excluded_trips)
@@ -241,6 +245,7 @@ pub struct StopTimes {
     pub stop_times_id: usize,
     pub stop_times: Vec<StopTime>,
 }
+
 impl StopTimes {
     pub fn get_stop_inx(&self, stop_id: StopId) -> Option<usize> {
         self.stop_times
@@ -403,7 +408,7 @@ impl fmt::Display for GtfsTime {
 #[derive(Debug, Default, Serialize, Deserialize)]
 pub struct Shape {
     pub(crate) shape_id: usize,
-    pub(crate) points: Vec<LatLng>,
+    pub points: Vec<LatLng>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, Default)]

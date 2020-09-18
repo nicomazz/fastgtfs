@@ -424,7 +424,11 @@ impl<'a> RaptorNavigator<'a> {
                     //  debug!("Setting new trip!");
                     assert!(
                         arriving_time_with_new_trip
-                            >= self.tbest.get(&curr_stop.stop_id).unwrap().clone()
+                            >= self
+                                .tbest
+                                .get(&curr_stop.stop_id)
+                                .unwrap_or(&GtfsTime::new_from_timestamp(0))
+                                .clone()
                     );
                     trip = Some(new_trip.trip_id);
                     _att_stop_inx = trip_stop_inx;
