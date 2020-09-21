@@ -43,9 +43,15 @@ impl Solution {
             }
         }
     }
-    pub(crate) fn add_walking_path(&mut self, from_stop_id: usize, distance: usize) {
+    pub(crate) fn add_walking_path(
+        &mut self,
+        from_stop_id: usize,
+        to_stop_id: usize,
+        distance: usize,
+    ) {
         let component = WalkSolutionComponent {
             from_stop_id,
+            to_stop_id,
             distance,
         };
         self.set_last_component_start(from_stop_id);
@@ -193,6 +199,7 @@ impl BusSolutionComponent {
 #[derive(Debug, Default, Clone)]
 pub struct WalkSolutionComponent {
     pub from_stop_id: usize,
+    pub to_stop_id: usize,
     pub distance: usize, // meters
 }
 

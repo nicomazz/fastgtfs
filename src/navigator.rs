@@ -613,7 +613,11 @@ impl<'a> RaptorNavigator<'a> {
             let prec_stop = backtrack_info.from_stop_id;
 
             if backtrack_info.is_walking_path() {
-                solution.add_walking_path(att_stop, backtrack_info.distance.unwrap() as usize);
+                solution.add_walking_path(
+                    prec_stop,
+                    att_stop,
+                    backtrack_info.distance.unwrap() as usize,
+                );
                 att_stop = prec_stop;
                 continue;
             }
