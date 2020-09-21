@@ -254,7 +254,7 @@ fn main() {
 
     println!("---> Missing: {}", todo.len());
 
-    let chunks = todo.iter().chunks(1000);
+    let chunks = todo.iter().chunks(500);
     for chunk in &chunks {
         print!(".");
         let this_chunk_results = chunk
