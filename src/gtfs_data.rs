@@ -159,7 +159,7 @@ impl GtfsData {
     }
 
     /// returns the number of seconds since midnight this trip departs and arrive
-    fn get_trip_departure_arrival_times(&self, trip: &Trip) -> (i64, i64) {
+    pub fn get_trip_departure_arrival_times(&self, trip: &Trip) -> (i64, i64) {
         let stop_times = self.get_stop_times(trip.stop_times_id);
         let trip_duration = stop_times.stop_times.last().unwrap().time;
         (trip.start_time, trip.start_time + trip_duration)
@@ -200,12 +200,17 @@ impl GtfsData {
         service.days[time.day_of_week() as usize]
     }
 
-    pub fn route_active_on_day(&self, route_id: usize, day: &GtfsTime) -> bool {
+    pub fn route_active_on_day(
+        &self,
+        route_id: usize,
+        day: &GtfsTime,
+        within_hours: Option<i64>,
+    ) -> bool {
         let route = self.get_route(route_id);
         route
             .trips
             .iter()
-            .any(|&t| self.trip_id_active_on_time(t, &day, None))
+            .any(|&t| self.trip_id_active_on_time(t, &day, within_hours))
     }
 
     pub fn trips_active_on_date_within_hours(
