@@ -410,7 +410,7 @@ impl fmt::Display for GtfsTime {
     }
 }
 
-#[derive(Debug, Default, Serialize, Deserialize)]
+#[derive(Debug, Default, Serialize, Deserialize, Clone)]
 pub struct Shape {
     pub(crate) shape_id: usize,
     pub points: Vec<LatLng>,
@@ -465,6 +465,10 @@ impl LatLng {
     }
     pub fn distance_meters(&self, other: &LatLng) -> u64 {
         self.as_point().geodesic_distance(&other.as_point()) as u64
+    }
+    // this should be used only for comparison
+    pub fn fast_distance(&self, other: &LatLng) -> u64 {
+        self.as_point().euclidean_distance(&other.as_point()) as u64
     }
 }
 
