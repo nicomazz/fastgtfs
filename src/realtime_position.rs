@@ -48,7 +48,7 @@ impl TripRealTimePositionData {
             + 1;
 
         let dx = succ.lat - att.lat;
-        let dy = succ.lng - succ.lng;
+        let dy = succ.lng - att.lng;
 
         let percent = att_time as f64 / delta_time_ as f64;
 
