@@ -131,7 +131,7 @@ impl GtfsData {
         let item = self
             .stops
             .par_iter()
-            .min_by_key(|s| s.stop_pos.as_point().geodesic_distance(&coord) as i64);
+            .min_by_key(|s| s.stop_pos.distance_meters_to_point(&coord) as i64);
         item.unwrap()
     }
 
@@ -139,7 +139,7 @@ impl GtfsData {
         let coord = pos.as_point();
         self.stops
             .par_iter()
-            .filter(|&stop| stop.stop_pos.as_point().geodesic_distance(&coord) < meters)
+            .filter(|&stop| stop.stop_pos.distance_meters_to_point(&coord) < meters)
             .map(|s| s.stop_id)
             .collect::<Vec<usize>>()
     }
@@ -465,6 +465,10 @@ impl LatLng {
     }
     pub fn distance_meters(&self, other: &LatLng) -> u64 {
         self.as_point().geodesic_distance(&other.as_point()) as u64
+    }
+
+    pub fn distance_meters_to_point(&self, other: &Point<f64>) -> f64 {
+        self.as_point().geodesic_distance(&other)
     }
     // this should be used only for comparison
     pub fn fast_distance(&self, other: &LatLng) -> u64 {
