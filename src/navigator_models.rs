@@ -24,6 +24,13 @@ impl fmt::Display for Solution {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         writeln!(
             f,
+            "\n---- New solution ----: {} -> {}",
+            self.start_time(),
+            self.end_time()
+        )
+        .unwrap();
+        writeln!(
+            f,
             "\n####### Solution components: {}",
             self.components.len()
         )
@@ -84,7 +91,7 @@ impl Solution {
 
     pub fn start_time(&self) -> GtfsTime {
         if self.components.is_empty() {
-            return GtfsTime::new_infinite();
+            return GtfsTime::new_from_midnight(self.navigation_start_time.since_midnight() as i64);
         }
 
         match self.components.first().unwrap() {
@@ -110,7 +117,7 @@ impl Solution {
     }
     pub fn end_time(&self) -> GtfsTime {
         if self.components.is_empty() {
-            return GtfsTime::new_infinite();
+            return GtfsTime::new_from_midnight(self.navigation_start_time.since_midnight() as i64);
         }
 
         match self.components.last().unwrap() {
@@ -122,7 +129,7 @@ impl Solution {
                         (self.navigation_start_time.since_midnight() + walk_time) as i64,
                     )
                 } else {
-                    // walk with a preceding bus
+                    // walk path preceeded by bus
                     assert!(self.components.len() >= 2);
                     let second_last = &self.components[self.components.len() - 2];
                     match second_last {
@@ -130,7 +137,7 @@ impl Solution {
                             (sl.arrival_time().since_midnight() + walk_time) as i64,
                         ),
                         _ => {
-                            panic!("Can't have 2 consecutive walk compnents!");
+                            panic!("Can't have 2 consecutive walk components!");
                         }
                     }
                 }

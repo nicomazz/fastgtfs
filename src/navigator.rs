@@ -25,7 +25,7 @@ pub struct RaptorNavigator<'a> {
     start_stop: Stop,
     end_stop: Stop,
 
-    // v[stop_id] -> is within 50 m to destination?
+    // v[stop_id] -> is within X m to destination? (check X in code)
     stops_near_destination_map: HashSet<StopId>,
     stops_near_destination_list: Vec<StopId>,
 
@@ -158,14 +158,13 @@ impl<'a> RaptorNavigator<'a> {
     }
 
     fn compute_stops_near_destination(&mut self, pos: LatLng) {
-        self.stops_near_destination_list = self.dataset.get_stops_in_range(pos, 50.0);
+        self.stops_near_destination_list = self.dataset.get_stops_in_range(pos, 100.0);
         self.stops_near_destination_map =
             self.stops_near_destination_list.iter().copied().collect();
     }
 
     fn send_solution(&mut self, solution: &Solution) {
         let callback = self.on_solution_found.lock().unwrap();
-        //callback(solution.clone());
         callback.send(solution.clone()).unwrap();
     }
     /// does 3 searches, each time removing the trips of the precedent solutions
@@ -206,7 +205,7 @@ impl<'a> RaptorNavigator<'a> {
         self.marked_stops.push(self.start_stop.stop_id);
         self.add_walking_path(0);
 
-        for hop_att in 1..self.navigation_params.max_changes {
+        for hop_att in 1..=self.navigation_params.max_changes + 1 {
             trace!("---- hop {}", hop_att);
             // Let's get all the routespassing trougth the stops marked
             let route_stops_to_consider = self.build_route_stop();
@@ -524,9 +523,9 @@ impl<'a> RaptorNavigator<'a> {
             .flat_map(|&from_stop_id| {
                 let from_stop = ds.get_stop(from_stop_id);
                 let from_stop_best_time = tbest.get(&from_stop_id).unwrap();
-                let near_walkable_stops = ds.get_near_stops_by_walk(from_stop.stop_id);
+                let precalculated_near_stops = ds.get_near_stops_by_walk(from_stop.stop_id);
                 let near_stops_by_air_distance: Vec<StopDistance> =
-                    if near_walkable_stops.near_stops.is_empty() {
+                    if precalculated_near_stops.near_stops.is_empty() {
                         // it should almost never enter here!
                         error!("No near stops for {}", from_stop.stop_name);
                         ds.get_near_stops(&from_stop.stop_pos, NEAR_STOP_NUMBER)
@@ -543,14 +542,15 @@ impl<'a> RaptorNavigator<'a> {
                     };
 
                 let near_stops_with_distance: &Vec<StopDistance> =
-                    if near_walkable_stops.near_stops.is_empty() {
+                    if precalculated_near_stops.near_stops.is_empty() {
                         &near_stops_by_air_distance
                     } else {
-                        &near_walkable_stops.near_stops
+                        &precalculated_near_stops.near_stops
                     };
 
                 near_stops_with_distance
                     .iter()
+                    .filter(|sd| sd.distance_meters < 10000) //nobody wants to walk 10 km
                     .filter_map(|sd| {
                         let to_stop_id = sd.stop_id;
                         let cost = RaptorNavigator::seconds_by_walk(sd.distance_meters);
