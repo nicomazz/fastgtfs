@@ -141,7 +141,7 @@ fn calculate_time_at_each_path_point(ds: &GtfsData, trip_id: TripId) -> Vec<i64>
         prec_stop_inx_in_shape = stop_inx_in_shape;
         prec_time = next_time;
     }
-    return time_at_shape_point;
+    time_at_shape_point
 }
 
 fn nearest_point_index(points: &Vec<LatLng>, target: &LatLng, start_from: usize) -> usize {
