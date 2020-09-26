@@ -194,6 +194,14 @@ fn valid_trip_start_times() {
 }
 
 #[test]
+fn valid_trips() {
+    let ds = RawParser::read_preprocessed_data_from_default();
+    for route in &ds.routes {
+        assert!(!route.trips.is_empty(), "Route without trips: {:?}", route);
+    }
+}
+
+#[test]
 fn date_parsing() {
     let seconds_in_hour = 60 * 60;
     let five_am = 5 * seconds_in_hour;
