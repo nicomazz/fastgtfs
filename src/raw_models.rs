@@ -5,6 +5,7 @@ use std::path::Path;
 use serde::Deserialize;
 
 #[derive(Debug, Deserialize, Default)]
+#[serde(default)]
 pub struct RawAgency {
     pub agency_id: String,
     pub agency_name: String,
@@ -16,6 +17,7 @@ pub struct RawAgency {
 }
 
 #[derive(Debug, Deserialize, Default)]
+#[serde(default)]
 pub struct RawCalendar {
     pub service_id: String,
     pub monday: String,
@@ -30,6 +32,7 @@ pub struct RawCalendar {
 }
 
 #[derive(Debug, Deserialize, Default)]
+#[serde(default)]
 pub struct RawCalendarDates {
     pub service_id: String,
     pub date: String,
@@ -37,6 +40,7 @@ pub struct RawCalendarDates {
 }
 
 #[derive(Debug, Deserialize, Default)]
+#[serde(default)]
 pub struct RawRoute {
     pub route_id: String,
     pub agency_id: String,
@@ -50,6 +54,7 @@ pub struct RawRoute {
 }
 
 #[derive(Debug, Deserialize, Default)]
+#[serde(default)]
 pub struct RawShape {
     pub shape_id: String,
     pub shape_pt_lat: String,
@@ -59,6 +64,7 @@ pub struct RawShape {
 }
 
 #[derive(Debug, Deserialize, Default)]
+#[serde(default)]
 pub struct RawStopTime {
     pub trip_id: String,
     pub arrival_time: String,
@@ -72,6 +78,7 @@ pub struct RawStopTime {
 }
 
 #[derive(Debug, Deserialize, Default)]
+#[serde(default)]
 pub struct RawStop {
     pub stop_id: String,
     pub stop_code: String,
@@ -88,6 +95,7 @@ pub struct RawStop {
 }
 
 #[derive(Debug, Deserialize, Default)]
+#[serde(default)]
 pub struct RawTrip {
     pub route_id: String,
     pub service_id: String,
@@ -101,6 +109,7 @@ pub struct RawTrip {
 }
 
 #[derive(Debug, Deserialize, Default)]
+#[serde(default)]
 pub struct RawService {
     pub service_id: String,
     pub monday: String,
@@ -115,6 +124,7 @@ pub struct RawService {
 }
 
 #[derive(Debug, Deserialize, Default, Clone)]
+#[serde(default)]
 pub struct RawServiceException {
     pub service_id: String,
     pub date: String,
