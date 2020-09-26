@@ -1,7 +1,5 @@
-use crate::gtfs_data::{GtfsData, RouteId, StopId, TripId};
+use crate::gtfs_data::{GtfsData, GtfsTime, RouteId, StopId, TripId};
 use itertools::Itertools;
-use rayon::iter::IntoParallelRefIterator;
-use rayon::iter::ParallelIterator;
 use std::collections::{BTreeSet, HashMap, HashSet};
 
 #[derive(Default, Debug, Hash, Ord, PartialOrd, Eq, PartialEq, Clone)]
@@ -13,16 +11,16 @@ struct Node {
 
 #[derive(Default)]
 pub struct TimeTable {
-    routes: Vec<RouteId>,
-    trips: Vec<TripId>,
+    pub routes: Vec<RouteId>,
+    trips: BTreeSet<TripId>,
     /// after topological sort
     pub stops: Vec<StopId>,
-    direction: i8,
+    pub direction: i8,
 }
 
 impl TimeTable {
     pub fn new(ds: &GtfsData, routes: Vec<RouteId>, direction: i8) -> Result<TimeTable, String> {
-        let trips: Vec<TripId> = routes
+        let trips: BTreeSet<TripId> = routes
             .iter()
             .map(|&route_id| ds.get_route(route_id))
             .flat_map(|r| {
@@ -45,10 +43,51 @@ impl TimeTable {
             direction,
             ..Default::default()
         };
-
-        result.stops = TimeTableBuilder::new().sort_stops_topologically(ds, &result.trips);
+        let trips = result
+            .trips
+            .iter()
+            .map(|&t| t as usize)
+            .collect::<Vec<usize>>();
+        result.stops = TimeTableBuilder::new().sort_stops_topologically(ds, &trips[..]);
 
         Ok(result)
+    }
+
+    pub fn get_column(&self, ds: &GtfsData, trip_id: TripId) -> Vec<usize> {
+        assert!(self.trips.contains(&trip_id));
+        let trip = ds.get_trip(trip_id);
+        let stop_times = &ds.get_stop_times(trip.stop_times_id).stop_times;
+
+        let mut past_appearence = HashMap::new();
+        let mut results = vec![];
+        for target_stop_id in self.stops.clone() {
+            let mut times = (*past_appearence.entry(target_stop_id).or_default()) + 1;
+            let mut target_time = GtfsTime::new_infinite();
+            for st in stop_times.iter() {
+                if st.stop_id == target_stop_id {
+                    times -= 1;
+                    if times == 0 {
+                        target_time = GtfsTime::new_from_midnight(st.time + trip.start_time);
+                        break;
+                    }
+                }
+            }
+            results.push(target_time);
+            *past_appearence.entry(target_stop_id).or_insert(0) += 1;
+        }
+        results
+            .iter()
+            .map(|time| time.since_midnight() as usize)
+            .collect_vec()
+    }
+
+    pub fn get_trips_active_on_date(&self, dataset: &GtfsData, date: &GtfsTime) -> Vec<TripId> {
+        self.trips
+            .iter()
+            .filter(|&&t| dataset.trip_id_active_on_time(t, date, Some(24)))
+            .sorted_by_key(|&&t| dataset.get_trip(t).start_time)
+            .copied()
+            .collect_vec()
     }
 }
 #[derive(Default)]
@@ -66,7 +105,7 @@ impl TimeTableBuilder {
     fn new() -> TimeTableBuilder {
         Default::default()
     }
-    fn sort_stops_topologically(&mut self, ds: &GtfsData, trips: &Vec<TripId>) -> Vec<StopId> {
+    fn sort_stops_topologically(&mut self, ds: &GtfsData, trips: &[TripId]) -> Vec<StopId> {
         self.build_graph(ds, trips);
         debug_assert!(
             !self.graph.is_empty(),
@@ -76,7 +115,7 @@ impl TimeTableBuilder {
         );
         self.topological_sort()
     }
-    fn build_graph(&mut self, ds: &GtfsData, trips: &Vec<TripId>) {
+    fn build_graph(&mut self, ds: &GtfsData, trips: &[TripId]) {
         for &trip_id in trips.iter() {
             let trip = ds.get_trip(trip_id);
             let stops = &ds.get_stop_times(trip.stop_times_id).stop_times;
