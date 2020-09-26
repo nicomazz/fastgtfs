@@ -456,10 +456,10 @@ pub struct LatLng {
 }
 
 impl LatLng {
-    pub(crate) fn as_point(&self) -> Point<f64> {
+    pub fn as_point(&self) -> Point<f64> {
         Coordinate {
-            x: self.lat,
-            y: self.lng,
+            y: self.lat,
+            x: self.lng,
         }
         .into()
     }
