@@ -352,7 +352,7 @@ impl GtfsTime {
     }
 
     pub fn new_infinite() -> GtfsTime {
-        GtfsTime::new_from_timestamp(32503680000) // First January 3000
+        GtfsTime::new_from_timestamp(32_503_680_000) // First January 3000
     }
 
     pub fn from_date(yyyymmdd: &String) -> GtfsTime {

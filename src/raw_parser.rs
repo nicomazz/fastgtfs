@@ -216,7 +216,7 @@ impl RawParser {
         let last_modified = metadata.modified().unwrap().elapsed().unwrap().as_secs();
 
         println!("Last modified: {}", last_modified);
-        if last_modified > 60 * 60 * 24 {
+        if last_modified > 60 * 60 * 24 * 7 {
             // rebuild the data every day
             println!("Generating serializable data!");
             self.generate_serialized_data(path);
@@ -686,7 +686,7 @@ fn nearest_point(target: &LatLng, points: &Vec<LatLng>) -> (usize, f64) {
         .iter()
         .enumerate()
         // TODO geodesic distance is incredibly expensive, find a cheaper alternative
-        .min_by_key(|(_, pos)| (pos.as_point().geodesic_distance(&coord) * 100000.0) as i64)
+        .min_by_key(|(_, pos)| (pos.as_point().geodesic_distance(&coord) * 100_000.0) as i64)
         .map(|(i, pos)| (i, pos.as_point().geodesic_distance(&coord)))
         .unwrap()
 }
