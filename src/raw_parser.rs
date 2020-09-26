@@ -281,6 +281,7 @@ impl RawParser {
     fn parse_stops(&mut self, path: &Path) {
         let stop_path = Path::new(&path).join(Path::new("stops.txt"));
         let raw_stops: Vec<RawStop> = parse_gtfs(&stop_path).expect("Stop parsing");
+        assert!(!raw_stops.is_empty());
         raw_stops.into_iter().for_each(|s| self.add_stop(s));
     }
 
@@ -447,6 +448,7 @@ impl RawParser {
     fn parse_routes(&mut self, path: &Path) {
         let routes_path = Path::new(&path).join(Path::new("routes.txt"));
         let raw_routes: Vec<RawRoute> = parse_gtfs(&routes_path).expect("Raw routes parsing");
+        assert!(!raw_routes.is_empty());
         for route in raw_routes {
             self.add_route(route);
         }
@@ -552,6 +554,7 @@ impl RawParser {
     fn parse_trips(&mut self, path: &Path) {
         let trips_path = Path::new(&path).join(Path::new("trips.txt"));
         let raw_trips: Vec<RawTrip> = parse_gtfs(&trips_path).expect("Raw trips parsing");
+        assert!(!raw_trips.is_empty());
         for trip in raw_trips {
             self.add_trip(trip);
         }
