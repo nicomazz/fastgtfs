@@ -1,16 +1,17 @@
 #[cfg(test)]
 mod tests {
-    use fastgtfs::gtfs_data::{GtfsData, StopId, TripId};
+    use std::collections::HashSet;
+    use std::time::Instant;
 
+    use itertools::Itertools;
+    use rayon::iter::IntoParallelRefIterator;
+    use rayon::iter::ParallelIterator;
+
+    use fastgtfs::gtfs_data::{GtfsData, StopId, TripId};
     use fastgtfs::raw_parser::RawParser;
     use fastgtfs::realtime_position::TripRealTimePositionData;
     use fastgtfs::test_utils::get_test_paths;
     use fastgtfs::timetable::TimeTable;
-    use itertools::Itertools;
-    use rayon::iter::IntoParallelRefIterator;
-    use rayon::iter::ParallelIterator;
-    use std::collections::HashSet;
-    use std::time::Instant;
 
     fn init() {
         let _ = env_logger::builder()
@@ -85,5 +86,4 @@ mod tests {
         print!("Errors: {}", errors);
         assert!(errors < 5, "{} Errors", errors);
     }
-
 }
