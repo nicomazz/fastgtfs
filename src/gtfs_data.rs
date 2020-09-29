@@ -281,8 +281,10 @@ impl GtfsData {
             .collect::<HashMap<StopTimesId, Vec<StopIndex>>>();
 
         trips
-            .iter()
-            .map(|&t_id| (t_id, self.get_stop_times(self.get_trip(t_id).stop_times_id)))
+            .par_iter()
+            .map(|&t_id| self.get_trip(t_id))
+            .filter(|t| self.trip_active_on_time(t, &date, Some(within_sec)))
+            .map(|t| (t.trip_id, self.get_stop_times(t.stop_times_id)))
             .filter_map(|(t_id, _stop_times)| {
                 let trip = self.get_trip(t_id);
                 let indexes = stop_indexes.get(&trip.stop_times_id).unwrap();
