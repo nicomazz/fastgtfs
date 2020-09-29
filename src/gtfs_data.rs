@@ -152,10 +152,10 @@ impl GtfsData {
         &self,
         trip_id: usize,
         day: &GtfsTime,
-        within_hours: Option<i64>,
+        within_seconds: Option<i64>,
     ) -> bool {
         let trip = self.get_trip(trip_id);
-        self.trip_active_on_time(trip, day, within_hours)
+        self.trip_active_on_time(trip, day, within_seconds)
     }
 
     /// returns the number of seconds since midnight this trip departs and arrive
@@ -170,14 +170,14 @@ impl GtfsData {
         &self,
         trip: &Trip,
         time: &GtfsTime,
-        within_hours: Option<i64>,
+        within_seconds: Option<i64>,
     ) -> bool {
         if trip.service_id.is_none() {
             error!("Trip without service id! {}", trip.trip_short_name);
             return true;
         }
         let seconds_in_h = 60 * 60;
-        let within_seconds = within_hours.unwrap_or(24) * seconds_in_h;
+        let within_seconds = within_seconds.unwrap_or(24 * seconds_in_h);
         let target_time = time.since_midnight() as i64;
 
         // It starts afterwards our window.
@@ -204,13 +204,13 @@ impl GtfsData {
         &self,
         route_id: usize,
         day: &GtfsTime,
-        within_hours: Option<i64>,
+        within_seconds: Option<i64>,
     ) -> bool {
         let route = self.get_route(route_id);
         route
             .trips
             .iter()
-            .any(|&t| self.trip_id_active_on_time(t, &day, within_hours))
+            .any(|&t| self.trip_id_active_on_time(t, &day, within_seconds))
     }
 
     pub fn trips_active_on_date_within_hours(
@@ -223,7 +223,7 @@ impl GtfsData {
         route
             .trips
             .iter()
-            .filter(|&&t| self.trip_id_active_on_time(t, time, Some(within_h)))
+            .filter(|&&t| self.trip_id_active_on_time(t, time, Some(within_h * 60 * 60)))
             .cloned()
             .collect::<Vec<usize>>()
     }

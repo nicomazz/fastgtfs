@@ -84,7 +84,7 @@ impl TimeTable {
     pub fn get_trips_active_on_date(&self, dataset: &GtfsData, date: &GtfsTime) -> Vec<TripId> {
         self.trips
             .iter()
-            .filter(|&&t| dataset.trip_id_active_on_time(t, date, Some(24)))
+            .filter(|&&t| dataset.trip_id_active_on_time(t, date, Some(24 * 60 * 60)))
             .sorted_by_key(|&&t| dataset.get_trip(t).start_time)
             .copied()
             .collect_vec()
