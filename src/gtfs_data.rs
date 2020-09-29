@@ -2,7 +2,7 @@ extern crate flexbuffers;
 extern crate serde;
 
 use std::cmp::Ordering;
-use std::collections::{BTreeSet, HashSet};
+use std::collections::{BTreeSet, HashMap, HashSet};
 use std::fmt;
 use std::time::SystemTime;
 
@@ -13,8 +13,8 @@ use geo::algorithm::geodesic_distance::GeodesicDistance;
 use geo::{Coordinate, Point};
 use itertools::Itertools;
 use log::error;
-use rayon::iter::IntoParallelRefIterator;
 use rayon::iter::ParallelIterator;
+use rayon::iter::{IntoParallelIterator, IntoParallelRefIterator};
 use serde::{Deserialize, Serialize};
 
 use self::serde::export::Formatter;
@@ -227,6 +227,87 @@ impl GtfsData {
             .cloned()
             .collect::<Vec<usize>>()
     }
+    pub fn get_near_trips(&self, time: &GtfsTime, position: &LatLng, number: usize) -> Vec<&Trip> {
+        let near_stops = self.get_near_stops(position, 300);
+
+        let unique_routes = near_stops
+            .into_par_iter()
+            .map(|s| self.get_stop(s))
+            .flat_map(|stop| &stop.routes)
+            .collect::<Vec<&RouteId>>()
+            .into_iter()
+            .unique()
+            .collect::<Vec<&RouteId>>();
+
+        let active_trips = unique_routes
+            .into_par_iter()
+            .flat_map(|&r_id| &self.get_route(r_id).trips)
+            .map(|&t_id| self.get_trip(t_id))
+            .filter(|&trip| self.trip_active_on_time(trip, time, Some(1)))
+            .collect::<Vec<&Trip>>();
+
+        active_trips
+            .into_iter()
+            .take(number)
+            .collect::<Vec<&Trip>>()
+    }
+
+    /// Returns all the route's trips that have stop_id in the time range [date, date + within_sec]
+    pub fn trips_active_in_stop_at_time_range(
+        &self,
+        route_id: RouteId,
+        stop_id: StopId,
+        date: GtfsTime,
+        within_sec: i64,
+    ) -> Vec<(TripId, StopIndex)> {
+        let route = self.get_route(route_id);
+        let trips = &route.trips;
+
+        let stop_indexes = route
+            .stop_times
+            .par_iter()
+            .map(|&st| self.get_stop_times(st))
+            .map(|st| {
+                (
+                    st.stop_times_id,
+                    st.stop_times
+                        .iter()
+                        .enumerate()
+                        .filter(|(_inx, st_att)| st_att.stop_id == stop_id)
+                        .map(|(i, _)| i)
+                        .collect(),
+                )
+            })
+            .collect::<HashMap<StopTimesId, Vec<StopIndex>>>();
+
+        trips
+            .iter()
+            .map(|&t_id| (t_id, self.get_stop_times(self.get_trip(t_id).stop_times_id)))
+            .filter_map(|(t_id, _stop_times)| {
+                let trip = self.get_trip(t_id);
+                let indexes = stop_indexes.get(&trip.stop_times_id).unwrap();
+                self.trip_has_stop_in_time_range(trip, &indexes, date.clone(), within_sec)
+            })
+            .collect()
+    }
+
+    pub fn trip_has_stop_in_time_range(
+        &self,
+        trip: &Trip,
+        stop_indexes: &[StopIndex],
+        date: GtfsTime,
+        within_sec: i64,
+    ) -> Option<(TripId, StopIndex)> {
+        let stop_times = &self.get_stop_times(trip.stop_times_id).stop_times;
+        let upper_time = GtfsTime::new_from_timestamp(date.timestamp + within_sec);
+        for &inx in stop_indexes {
+            let time = date.new_replacing_time(stop_times[inx].time + trip.start_time);
+            if date <= time && time <= upper_time {
+                return Some((trip.trip_id, inx));
+            }
+        }
+        None
+    }
 }
 
 #[cached(
@@ -234,7 +315,7 @@ impl GtfsData {
     create = "{ SizedCache::with_size(5000) }",
     convert = r#"{ ((pos.lat * 1000.0) as u64 , (pos.lng * 1000.0) as u64,number) }"#
 )]
-pub fn near_stops(pos: &LatLng, number: usize, stops: &Vec<Stop>) -> Vec<usize> {
+pub fn near_stops(pos: &LatLng, number: usize, stops: &[Stop]) -> Vec<usize> {
     let coord = pos.as_point();
     stops
         .iter()
@@ -355,7 +436,7 @@ impl GtfsTime {
         GtfsTime::new_from_timestamp(32_503_680_000) // First January 3000
     }
 
-    pub fn from_date(yyyymmdd: &String) -> GtfsTime {
+    pub fn from_date(yyyymmdd: &str) -> GtfsTime {
         let date = NaiveDate::parse_from_str(yyyymmdd, "%Y%m%d").unwrap();
         let date = Utc
             .from_utc_date(&date)
