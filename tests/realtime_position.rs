@@ -2,7 +2,7 @@
 mod tests {
 
     use fastgtfs::gtfs_data::{GtfsData, TripId};
-    use fastgtfs::navigator_models::SolutionComponent;
+
     use fastgtfs::raw_parser::RawParser;
     use fastgtfs::test_utils::get_test_paths;
 
@@ -51,7 +51,7 @@ mod tests {
         assert!(end_pos.distance_meters(&shape.points.last().unwrap()) < 10);
 
         let mut over = 0;
-        for (i, stop_time) in stop_times.stop_times.iter().enumerate() {
+        for (_i, stop_time) in stop_times.stop_times.iter().enumerate() {
             let real_stop_time = trip.start_time + stop_time.time;
             let real_stop_position = &ds.get_stop(stop_time.stop_id).stop_pos;
 

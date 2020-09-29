@@ -152,9 +152,11 @@ impl Solution {
     }
 }
 
+//noinspection RsExternalLinter
 #[derive(Debug, Clone)]
 pub enum SolutionComponent {
     Walk(WalkSolutionComponent),
+    //noinspection ALL
     Bus(BusSolutionComponent),
 }
 

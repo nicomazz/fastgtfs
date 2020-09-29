@@ -94,7 +94,7 @@ mod gtfs_serializer {
             serialize_vector(f.clone(), "stops", ds.stops),
             serialize_vector(f.clone(), "stop_times", ds.stop_times),
             serialize_vector(f.clone(), "services", ds.services),
-            serialize_vector(f.clone(), "walk_times", ds.walk_times),
+            serialize_vector(f, "walk_times", ds.walk_times),
         ]
         .into_iter()
         .for_each(|v| {
@@ -139,7 +139,7 @@ mod gtfs_deserializer {
         let stops_t = deserialize_vector(folder.clone() + "/stops");
         let stop_times_t = deserialize_vector(folder.clone() + "/stop_times");
         let services_t = deserialize_vector(folder.clone() + "/services");
-        let walk_times_t = deserialize_vector(folder.clone() + "/walk_times");
+        let walk_times_t = deserialize_vector(folder + "/walk_times");
 
         GtfsData {
             dataset_id: 0,
@@ -414,7 +414,7 @@ impl RawParser {
             .into_iter()
             .map(|(shape_id, vals)| ShapeInConstruction {
                 id: shape_id.to_string(),
-                raw_shapes: vals.into_iter().collect(),
+                raw_shapes: vals.collect(),
                 points: vec![],
             })
             .collect();
@@ -683,7 +683,7 @@ impl RawParser {
 
 /// return the index in points of the nearest point to target
 /// (index,distance)
-fn nearest_point(target: &LatLng, points: &Vec<LatLng>) -> (usize, f64) {
+fn nearest_point(target: &LatLng, points: &[LatLng]) -> (usize, f64) {
     let coord = target.as_point();
     points
         .iter()

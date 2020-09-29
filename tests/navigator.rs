@@ -6,7 +6,7 @@ use chrono::NaiveDate;
 use fastgtfs::gtfs_data::GtfsTime;
 
 fn default_start_time() -> GtfsTime {
-    let start_timestamp = NaiveDate::from_ymd(2020, 08, 30)
+    let start_timestamp = NaiveDate::from_ymd(2020, 8, 30)
         .and_hms(13, 30, 00)
         .timestamp();
     GtfsTime::new_from_timestamp(start_timestamp)
@@ -19,9 +19,9 @@ mod tests {
 
     use log::debug;
 
-    use fastgtfs::gtfs_data::{GtfsData, LatLng};
+    use fastgtfs::gtfs_data::LatLng;
     use fastgtfs::navigator::RaptorNavigator;
-    use fastgtfs::navigator_models::{NavigationParams, Solution, SolutionComponent};
+    use fastgtfs::navigator_models::{NavigationParams, Solution};
     use fastgtfs::raw_parser::RawParser;
     use fastgtfs::test_utils::get_test_paths;
 
@@ -60,12 +60,12 @@ mod tests {
             let mut navigator = RaptorNavigator::new(&dataset, Arc::new(Mutex::new(tx)));
 
             let venice = LatLng {
-                lat: 45.437771117019466,
-                lng: 12.31865644454956,
+                lat: 45.437_771_117_019_466,
+                lng: 12.318_656_444_549_56,
             };
             let nave_de_vero = LatLng {
-                lat: 45.45926209023005,
-                lng: 12.21256971359253,
+                lat: 45.459_262_090_230_05,
+                lng: 12.212_569_713_592_53,
             };
 
             let params = NavigationParams {

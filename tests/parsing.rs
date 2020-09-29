@@ -117,7 +117,7 @@ fn test_routes_per_stop() {
     let alone_stops = ds
         .stops
         .iter()
-        .filter(|s| s.routes.len() == 0)
+        .filter(|s| s.routes.is_empty())
         .map(|s| (s.stop_name.clone(), s.routes.len()))
         .collect::<Vec<(String, usize)>>();
 

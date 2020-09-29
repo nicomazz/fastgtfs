@@ -65,7 +65,7 @@ impl TripRealTimePositionData {
     }
 }
 
-fn create_cumulative_distances(points: &Vec<LatLng>) -> Vec<u64> {
+fn create_cumulative_distances(points: &[LatLng]) -> Vec<u64> {
     let mut cum_dist = vec![0; points.len()];
     for i in 1..points.len() {
         cum_dist[i] = cum_dist[i - 1] + points[i - 1].distance_meters(&points[i]);
@@ -144,7 +144,7 @@ fn calculate_time_at_each_path_point(ds: &GtfsData, trip_id: TripId) -> Vec<i64>
     time_at_shape_point
 }
 
-fn nearest_point_index(points: &Vec<LatLng>, target: &LatLng, start_from: usize) -> usize {
+fn nearest_point_index(points: &[LatLng], target: &LatLng, start_from: usize) -> usize {
     let mut best_dist = u64::MAX;
     let mut best_inx = start_from;
     for (i, p) in points.iter().skip(start_from).enumerate() {

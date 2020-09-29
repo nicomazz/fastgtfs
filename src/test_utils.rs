@@ -11,10 +11,10 @@ pub fn get_test_paths() -> Vec<String> {
 }
 
 pub fn assert_dataset_filled(dataset: &GtfsData) {
-    assert!(dataset.routes.len() > 0, "Routes empty!");
-    assert!(dataset.trips.len() > 0, "Trips empty!");
-    assert!(dataset.shapes.len() > 0, "Shapes empty!");
-    assert!(dataset.stops.len() > 0, "Stops empty!");
+    assert!(!dataset.routes.is_empty(), "Routes empty!");
+    assert!(!dataset.trips.is_empty(), "Trips empty!");
+    assert!(!dataset.shapes.is_empty(), "Shapes empty!");
+    assert!(!dataset.stops.is_empty(), "Stops empty!");
 }
 
 pub fn assert_dataset_empty(dataset: &GtfsData) {

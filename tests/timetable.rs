@@ -7,9 +7,9 @@ mod tests {
     use rayon::iter::IntoParallelRefIterator;
     use rayon::iter::ParallelIterator;
 
-    use fastgtfs::gtfs_data::{GtfsData, StopId, TripId};
+    use fastgtfs::gtfs_data::StopId;
     use fastgtfs::raw_parser::RawParser;
-    use fastgtfs::realtime_position::TripRealTimePositionData;
+
     use fastgtfs::test_utils::get_test_paths;
     use fastgtfs::timetable::TimeTable;
 
