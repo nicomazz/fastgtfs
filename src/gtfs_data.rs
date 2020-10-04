@@ -19,20 +19,18 @@ use serde::{Deserialize, Serialize};
 
 use self::serde::export::Formatter;
 
+/// This is the core of the library. A GTFS dataset is represented by `GtfsData`.
+/// a `GtfsData` object is created by the `RawParser`.
 #[derive(Debug, Default, Serialize, Deserialize)]
 pub struct GtfsData {
     pub dataset_id: u32,
-    // pub calendar: HashMap<String, Calendar>,
-    // pub calendar_dates: HashMap<String, Vec<CalendarDate>>,
     pub routes: Vec<Route>,
     pub trips: Vec<Trip>,
     pub shapes: Vec<Shape>,
     pub stops: Vec<Stop>,
     pub services: Vec<Service>,
     pub stop_times: Vec<StopTimes>,
-
     pub walk_times: Vec<StopWalkTime>,
-    //pub agencies: Vec<Agency>,
 }
 
 impl GtfsData {
@@ -62,7 +60,8 @@ impl GtfsData {
 
     pub fn get_route_stop_times(&self, route_id: usize) -> Vec<&StopTimes> {
         let route = self.get_route(route_id);
-        // There are the stop times of the route's trips, without duplicates
+        // `route.stop_times` contains all the stop times of all the trips,
+        // without duplicates.
         route
             .stop_times
             .iter()
@@ -74,10 +73,8 @@ impl GtfsData {
         &self.shapes[id]
     }
 
-    /// returns the first trip that has `stop` (with inx after `start_stop_inx`) after time (not in excluded_trips)
-    /// We make the `almost right` assumption that all the trips are from the same route id, and that they all share the same stop_time.
-    /// This is true most of the times.
-    /// TODO: handle this correctly
+    /// returns the first trip that has `stop` (with inx after `start_stop_inx`)
+    /// after `min_time` (not in excluded_trips).
     pub fn trip_after_time(
         &self,
         trips: &[TripId],
@@ -110,7 +107,7 @@ impl GtfsData {
             .map(|t_id| self.get_trip(*t_id))
             .filter(|t| {
                 t.stop_times_id == stop_times_id
-                    && self.trip_active_on_time(t, min_time, None)
+                    && self.is_trip_active_on_time(t, min_time, None)
                     && t.start_time + trips_duration >= min_time.since_midnight() as i64
             })
             .find_map(|trip| {
@@ -125,7 +122,7 @@ impl GtfsData {
             })
     }
 
-    // todo: overoptimize
+    // TODO: This is pretty slow. It should be opitimized
     pub fn find_nearest_stop(&self, pos: &LatLng) -> &Stop {
         let coord = pos.as_point();
         let item = self
@@ -144,29 +141,30 @@ impl GtfsData {
             .collect::<Vec<usize>>()
     }
 
+    /// The result of this query is actually cached. See `near_stops` for more details.
     pub fn get_near_stops(&self, pos: &LatLng, number: usize) -> Vec<usize> {
         near_stops(pos, number, &self.stops)
     }
 
-    pub fn trip_id_active_on_time(
+    pub fn is_trip_id_active_on_time(
         &self,
         trip_id: usize,
         day: &GtfsTime,
         within_seconds: Option<i64>,
     ) -> bool {
         let trip = self.get_trip(trip_id);
-        self.trip_active_on_time(trip, day, within_seconds)
+        self.is_trip_active_on_time(trip, day, within_seconds)
     }
 
-    /// returns the number of seconds since midnight this trip departs and arrive
+    /// returns the number of seconds since midnight this trip departs and arrives.
     pub fn get_trip_departure_arrival_times(&self, trip: &Trip) -> (i64, i64) {
         let stop_times = self.get_stop_times(trip.stop_times_id);
         let trip_duration = stop_times.stop_times.last().unwrap().time;
         (trip.start_time, trip.start_time + trip_duration)
     }
-    /// returns true if this trip goes within `[time, time + within_hours]`,
+    /// returns true if this trip is active within `[time, time + within_hours]`,
     /// taking care of the service and its exceptions
-    pub fn trip_active_on_time(
+    pub fn is_trip_active_on_time(
         &self,
         trip: &Trip,
         time: &GtfsTime,
@@ -180,12 +178,12 @@ impl GtfsData {
         let within_seconds = within_seconds.unwrap_or(24 * seconds_in_h);
         let target_time = time.since_midnight() as i64;
 
-        // It starts afterwards our window.
+        // It starts after our window.
         if trip.start_time > target_time + within_seconds {
             return false;
         }
         let (_, arrival_time) = self.get_trip_departure_arrival_times(trip);
-        // It finishes before our window
+        // It finishes before our window.
         if arrival_time < target_time {
             return false;
         }
@@ -200,6 +198,7 @@ impl GtfsData {
         service.days[time.day_of_week() as usize]
     }
 
+    /// Returns true if `route_id` has at least one actrive trip on `[day, day + within_seconds]`
     pub fn route_active_on_day(
         &self,
         route_id: usize,
@@ -210,10 +209,10 @@ impl GtfsData {
         route
             .trips
             .iter()
-            .any(|&t| self.trip_id_active_on_time(t, &day, within_seconds))
+            .any(|&t| self.is_trip_id_active_on_time(t, &day, within_seconds))
     }
 
-    pub fn trips_active_on_date_within_hours(
+    pub fn get_trips_active_on_date_within_hours(
         &self,
         route_id: usize,
         time: &GtfsTime,
@@ -223,10 +222,12 @@ impl GtfsData {
         route
             .trips
             .iter()
-            .filter(|&&t| self.trip_id_active_on_time(t, time, Some(within_h * 60 * 60)))
+            .filter(|&&t| self.is_trip_id_active_on_time(t, time, Some(within_h * 60 * 60)))
             .cloned()
             .collect::<Vec<usize>>()
     }
+
+    /// Returns all the trips near to `position` at a given `time`
     pub fn get_near_trips(&self, time: &GtfsTime, position: &LatLng, number: usize) -> Vec<&Trip> {
         let near_stops = self.get_near_stops(position, 300);
 
@@ -243,7 +244,7 @@ impl GtfsData {
             .into_par_iter()
             .flat_map(|&r_id| &self.get_route(r_id).trips)
             .map(|&t_id| self.get_trip(t_id))
-            .filter(|&trip| self.trip_active_on_time(trip, time, Some(1)))
+            .filter(|&trip| self.is_trip_active_on_time(trip, time, Some(1)))
             .collect::<Vec<&Trip>>();
 
         active_trips
@@ -283,7 +284,7 @@ impl GtfsData {
         trips
             .par_iter()
             .map(|&t_id| self.get_trip(t_id))
-            .filter(|t| self.trip_active_on_time(t, &date, Some(within_sec)))
+            .filter(|t| self.is_trip_active_on_time(t, &date, Some(within_sec)))
             .map(|t| (t.trip_id, self.get_stop_times(t.stop_times_id)))
             .filter_map(|(t_id, _stop_times)| {
                 let trip = self.get_trip(t_id);
@@ -327,7 +328,7 @@ pub fn near_stops(pos: &LatLng, number: usize, stops: &[Stop]) -> Vec<usize> {
         .collect::<Vec<usize>>()
 }
 
-// contains a list of stops, and the time for each in seconds (the first has time 0)
+/// contains a list of stops, and the time for each in seconds (the first has always time 0)
 #[derive(Hash, Eq, Default, PartialEq, Debug, Serialize, Deserialize, Clone)]
 pub struct StopTimes {
     pub stop_times_id: usize,
@@ -382,7 +383,6 @@ pub struct Route {
     pub route_long_name: String,
 
     pub trips: Vec<usize>,
-    //pub stops: Vec<usize>, we get the stops from a trip stop_times
     pub dataset_index: u64,
     /// set of all the trips stop_times. Those are usually a very low number (<5?)
     pub stop_times: BTreeSet<usize>,
@@ -393,7 +393,7 @@ pub struct Trip {
     pub route_id: usize,
     pub trip_id: usize,
     pub shape_id: usize,
-    // this points to a vec<StopTime>
+    /// this points to a vec<StopTime>
     pub stop_times_id: usize,
 
     pub service_id: Option<usize>,
@@ -510,7 +510,6 @@ pub struct Stop {
 }
 
 pub fn to_coordinates(lat: &str, lng: &str) -> LatLng {
-    //println!("lat {}, lng:{}",lat,lng);
     LatLng {
         lat: lat.parse::<f64>().unwrap_or(0.0),
         lng: lng.parse::<f64>().unwrap_or(0.0),

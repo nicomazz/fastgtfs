@@ -15,51 +15,60 @@ use crate::navigator_models::SolutionComponent::Bus;
 use crate::navigator_models::{NavigationParams, Solution, SolutionComponent, TimeUpdate};
 use std::sync::mpsc::Sender;
 
-//type SolutionCallback = dyn FnMut(Solution) + Send + Sync + 'static;
 type SolutionCallback = Arc<Mutex<Sender<Solution>>>;
-
+/// This is an implementation of RAPTOR, from Microsoft research
+/// https://www.microsoft.com/en-us/research/wp-content/uploads/2012/01/raptor_alenex.pdf
+/// However, even if the idea is from the paper, there are al lot of small changes in the
+/// data representation, and optimizations to make the final result more human friendly.
+/// By human friendly, I mean that instead of changing 3 busses, with a few seconds for
+/// making each change, this algorithm prefers routes with a safer (higher) change time.
+///
+/// # Example
+///  
+/// See `tests/navigator.rs` for some example of how to use this.
 pub struct RaptorNavigator<'a> {
-    //on_solution_found: Arc<Mutex<SolutionCallback>>, //Sender<Solution>,
     on_solution_found: SolutionCallback, //Sender<Solution>,
 
     start_stop: Stop,
     end_stop: Stop,
 
-    // v[stop_id] -> is within X m to destination? (check X in code)
+    /// v[stop_id] -> is within X m to destination? (check X in code)
     stops_near_destination_map: HashSet<StopId>,
     stops_near_destination_list: Vec<StopId>,
 
-    // trips active today. This speeds up things by skipping the many trips that are not useful.
+    /// trips active on the searched date.
+    /// This speeds up things by skipping the many trips inactive trips.
     active_trips: HashMap<RouteId, Vec<TripId>>, // v[route_id] -> trips active in the searched date
 
+    /// From, to, departure time, max number of changes.
     navigation_params: NavigationParams,
 
     /// best arrival time at each `stop_id` with `changes`.
-    /// [stop_id][changes] -> distance from source in seconds
+    /// [stop_id][changes] -> distance from start stop in seconds
     t: HashMap<(StopId, Round), GtfsTime>,
 
-    /// best absolute time for each `stop`
+    /// best absolute time for each `stop`, in seconds since the start_time
     /// [stop_id] -> time
     tbest: HashMap<StopId, GtfsTime>,
 
     /// How do I arrive at `stop_id` with `changes` changes?
     /// This is used to reconstruct the solution
-    /// [stop_id][changes] -> trip that arrives there
+    /// [stop_id][changes] -> trip that arrives there, and the stop where I got into this trip.
     p: HashMap<(StopId, Round), BacktrackingInfo>,
 
     /// Stops to consider in the next iteration
     marked_stops: Vec<StopId>,
 
-    /// Optimizations if we only need the best solution, and not many of them
+    /// Used to optimize things if we only need the best solution.
     only_best: bool,
 
-    /// destination reached during the navigation. It might be the real destination stop, or one
-    /// nearby
+    /// When this is not None, it is the destination stop (as in `navigation_params`), or a stop nearby.
     best_stop: Option<StopId>,
-    /// how many hops do we need to reach the best_stop?
+    /// how many hops do we need to reach `best_stop`?
     best_kth: Option<Round>,
     best_destination_time: GtfsTime,
-    /// List of trip ids of previous solutions to avoid now (In this way, we can find new solutions
+    /// List of trip ids of previous solutions to avoid now
+    /// (In this way, we can find several different solutions).
     banned_trip_ids: HashSet<TripId>,
 
     dataset: &'a GtfsData,
@@ -129,7 +138,6 @@ impl<'a> RaptorNavigator<'a> {
         let now = Instant::now();
         self.navigation_params = params.clone();
 
-        // todo
         let start_end_stops = &[&params.from, &params.to]
             .to_vec()
             .into_par_iter()
@@ -167,7 +175,8 @@ impl<'a> RaptorNavigator<'a> {
         let callback = self.on_solution_found.lock().unwrap();
         callback.send(solution.clone()).unwrap();
     }
-    /// does 3 searches, each time removing the trips of the precedent solutions
+
+    /// does `params.max_changes` searches, each time adding the trips of precedent solutions in `banned_trip_ids`.
     pub fn find_path_multiple(&mut self, params: NavigationParams) {
         debug!("Navigation with param {:?} started", params);
         let now = Instant::now();
@@ -195,7 +204,7 @@ impl<'a> RaptorNavigator<'a> {
         info!("Navigation finished in: {} ms", now.elapsed().as_millis());
     }
 
-    /// Does |navigation_params.max_changes| passes
+    /// Does `navigation_params.max_changes` passes
     fn navigate(&mut self) {
         self.update_best(
             self.start_stop.stop_id,
@@ -207,7 +216,7 @@ impl<'a> RaptorNavigator<'a> {
 
         for hop_att in 1..=self.navigation_params.max_changes + 1 {
             trace!("---- hop {}", hop_att);
-            // Let's get all the routespassing trougth the stops marked
+            // Let's get all the routes passing through the stops marked
             let route_stops_to_consider = self.build_route_stop();
             trace!("Considering {} route_stops", route_stops_to_consider.len());
 
@@ -219,8 +228,6 @@ impl<'a> RaptorNavigator<'a> {
                 .collect();
             self.perform_best_updates(updates, hop_att);
             self.add_walking_path(hop_att);
-            // used for debugging purposes
-            // self.validate_all_stops(hop_att);
         }
     }
 
@@ -281,7 +288,7 @@ impl<'a> RaptorNavigator<'a> {
             .iter()
             .filter(|r_id| self.active_trips.contains_key(r_id))
             .flat_map(|&r_id| self.get_all_routes_stop(r_id, stop.stop_id))
-            .collect::<Vec<(RouteId, StopTimesId, StopIndex)>>() // vec<(route_id, stop_inx)>
+            .collect::<Vec<(RouteId, StopTimesId, StopIndex)>>()
     }
     /// This makes a list of routes that pass trough each marked stops.
     /// Those will be scanned later in handle_route_stop
@@ -496,9 +503,6 @@ impl<'a> RaptorNavigator<'a> {
     pub fn seconds_by_walk(meters: usize) -> u64 {
         let walk_speed_kmh = 3;
         (meters * 36 / (walk_speed_kmh * 10)) as u64
-        // m/h = X
-        /*let walk_speed_meters_per_minute = walk_speed_kmph * 100 / 6; // da km all'ora ci prendiamo metri per minuto (per far prima
-        (meters * 60 / walk_speed_meters_per_minute) as u64*/
     }
 
     fn stop_time(&self, stop_id: StopId, hop: u8) -> GtfsTime {
@@ -550,7 +554,7 @@ impl<'a> RaptorNavigator<'a> {
 
                 near_stops_with_distance
                     .iter()
-                    .filter(|sd| sd.distance_meters < 10000) //nobody wants to walk 10 km
+                    .filter(|sd| sd.distance_meters < 10000) //nobody wants to walk for 10 km
                     .filter_map(|sd| {
                         let to_stop_id = sd.stop_id;
                         let cost = RaptorNavigator::seconds_by_walk(sd.distance_meters);
@@ -628,7 +632,7 @@ impl<'a> RaptorNavigator<'a> {
             let prec_route = self.dataset.get_route(prec_route_id);
             let path = self.dataset.get_stop_times(prec_trip.stop_times_id);
 
-            // Addititonal check
+            // Additional check
             let start_inx = backtrack_info.from_stop_inx.unwrap();
             let time_at_start_inx =
                 self.new_time(path.stop_times[start_inx].time + prec_trip.start_time);
@@ -644,10 +648,10 @@ impl<'a> RaptorNavigator<'a> {
 
             assert!(
                 upper_time >= time_at_start_inx,
-                format!(
-                    "upper: {}, start {}, Wrong solution: {}",
-                    upper_time, time_at_start_inx, &solution
-                )
+                "upper: {}, start {}, Wrong solution: {}",
+                upper_time,
+                time_at_start_inx,
+                &solution
             );
             upper_time = time_at_start_inx;
 
@@ -679,7 +683,7 @@ impl<'a> RaptorNavigator<'a> {
             .map(|r| {
                 (
                     r.route_id,
-                    ds.trips_active_on_date_within_hours(r.route_id, &time, 4),
+                    ds.get_trips_active_on_date_within_hours(r.route_id, &time, 4),
                 )
             })
             .filter(|(_, v)| !v.is_empty())
@@ -713,7 +717,7 @@ impl<'a> RaptorNavigator<'a> {
                 assert!(
                     last_time <= b.departure_time(),
                     format!("Wrong solution: {}", &sol)
-                ); // todo fix this
+                );
                 last_time = b.arrival_time();
             }
         }

@@ -7,6 +7,8 @@ pub struct TripRealTimePositionData {
     time_at_shape_point_seconds: Vec<i64>,
 }
 
+/// `TripRealTimePositionData` is used to show the trips in movement on the map,
+/// in real time.
 impl TripRealTimePositionData {
     pub fn new(ds: &GtfsData, trip_id: TripId) -> TripRealTimePositionData {
         TripRealTimePositionData {

@@ -19,11 +19,24 @@ use crate::raw_models::{
     parse_gtfs, RawRoute, RawService, RawServiceException, RawShape, RawStop, RawStopTime, RawTrip,
 };
 
+/// `RawParser` converts several different gtfs datasets (set of .txt files), into a `GtfsData` structure.
+///
+/// # Example
+/// ```
+///     use fastgtfs::raw_parser::RawParser;
+///     use fastgtfs::gtfs_data::GtfsData;
+///
+///     let gtfs_folder = vec!["actv_aut".to_string(), "actv_nav".to_string()];
+///     let parser = RawParser::new(gtfs_folder).parse();
+///     let dataset : GtfsData = parser.dataset;
+/// ```
 #[derive(Debug, Default)]
 pub struct RawParser {
     paths: Vec<String>,
     pub dataset: GtfsData,
 
+    /// The following are used to map from the dataset namespace to the final `GtfsData` name space,
+    /// where all the entities are indexed by a numeric ID.
     pub routes_name_to_inx: HashMap<String, usize>,
     pub trip_name_to_inx: HashMap<String, usize>,
     pub shape_name_to_inx: HashMap<String, usize>,
@@ -46,7 +59,7 @@ struct StopTimeInConstruction {
     start_time: i64,
 }
 
-// 05:00:00
+/// Converts time from `05:00:00` to `5 * 60 * 60 + 00 * 60 + 00`
 pub fn str_time_to_seconds(s: &str) -> i64 {
     let sp: Vec<i64> = s.split(':').map(|s| s.parse::<i64>().unwrap()).collect();
     let (h, m, s) = (sp[0], sp[1], sp[2]);
@@ -85,6 +98,9 @@ mod gtfs_serializer {
         })
     }
 
+    /// Serialized all the dataset elements at the same time, creating several threads.
+    /// For the serialization, I use `flexbuffers`.
+    /// TODO: This might not be the fastest way. Do better.
     pub fn generate_serialized_data(ds: GtfsData, folder: String) {
         let f = folder;
         vec![
@@ -174,6 +190,8 @@ impl RawParser {
             .iter()
             .map(|p| Path::new(p))
             .for_each(|p| self.parse_path(p));
+        // This parses an additional file created with `walk_distance_calculator`,
+        // used to add walking paths in the navigation.
         self.try_parse_walk_paths();
     }
 
@@ -205,7 +223,7 @@ impl RawParser {
 
     pub fn ensure_data_serialized_created_in_path(&mut self, path: &str) {
         println!("Ensuring data serialized");
-        // todo, also check the version of the data
+        // todo, add a dataset version check, to avoid errors when the old app tries to read new data.
         let routes_file = format!("{}/routes", path);
         if !Path::new(&routes_file).exists() {
             self.generate_serialized_data(path);
@@ -605,7 +623,6 @@ impl RawParser {
             }
         }
     }
-    // TODO: how to fix this; every stop real stop should be associated with the nearest point in the list, if it is within 30 meters.
     fn parse_walk_paths(&mut self, path: &str) {
         let raw_content = read_file(Path::new(&path));
         let content = std::str::from_utf8(&raw_content).unwrap();

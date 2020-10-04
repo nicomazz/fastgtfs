@@ -11,7 +11,6 @@ pub struct NavigationParams {
     pub max_changes: u8,
     pub start_time: GtfsTime,
     pub num_solutions_to_find: u8,
-    //pub sol_callback: Box<dyn Fn(Solution)>,
 }
 
 #[derive(Debug, Default, Clone)]
@@ -107,7 +106,7 @@ impl Solution {
                             (sl.departure_time().since_midnight() - walk_time) as i64,
                         ),
                         _ => {
-                            panic!("Can't have 2 consecutive walk compnents!");
+                            panic!("Can't have 2 consecutive walk components!");
                         }
                     }
                 }

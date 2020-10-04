@@ -53,7 +53,6 @@ fn calendar_parsing() {
 fn dataset_parsing() {
     let dataset = make_dataset();
     assert!(!dataset.trips.is_empty());
-    println!("Finished parsing in TODO");
 }
 
 #[test]

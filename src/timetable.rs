@@ -9,11 +9,17 @@ struct Node {
     ith: u8,
 }
 
+/// `TimeTable` generates a timetable starting from a set of routes.
+/// The problem here is that route's trips can be different. (e.g. the trips in the morning skip
+/// several stops, that are done later in the day).
+/// For this reason, I do a topological sorting of all the trips paths.
+/// Then, It is possible to generate a matrix, where in some cells there might be `-`, that means
+/// that the trip does not do that stop.
 #[derive(Default)]
 pub struct TimeTable {
     pub routes: Vec<RouteId>,
     trips: BTreeSet<TripId>,
-    /// after topological sort
+    /// stops sorted after topological sort
     pub stops: Vec<StopId>,
     pub direction: i8,
 }
@@ -84,7 +90,7 @@ impl TimeTable {
     pub fn get_trips_active_on_date(&self, dataset: &GtfsData, date: &GtfsTime) -> Vec<TripId> {
         self.trips
             .iter()
-            .filter(|&&t| dataset.trip_id_active_on_time(t, date, Some(24 * 60 * 60)))
+            .filter(|&&t| dataset.is_trip_id_active_on_time(t, date, Some(24 * 60 * 60)))
             .sorted_by_key(|&&t| dataset.get_trip(t).start_time)
             .copied()
             .collect_vec()
