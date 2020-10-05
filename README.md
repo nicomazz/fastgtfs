@@ -32,7 +32,7 @@
 
   <a href="https://github.com/nicomazz/fastgtfs">
    <!-- <img src="images/logo.png" alt="Logo" width="80" height="80">-->
-   <img src="https://i.ibb.co/BG9HNr2/fastgtfs-cover.png" alt="fastgtfs-cover" border="0">
+   <img src="https://i.ibb.co/XDqf83x/fastgtfs-cover.png" alt="fastgtfs-cover" border="0">
   </a>
 
 
@@ -63,7 +63,6 @@
 <!-- ABOUT THE PROJECT -->
 ## About The Project
 
-[![Product Name Screen Shot][product-screenshot]](https://example.com)
 
 This library is the core of the [Venice Navigation&timetables](https://play.google.com/apps/testing/com.actv.nicomazz.lastjni) app. The aim of the app is to provide services using GTFS data completely **offline**. In this way, tourists without an intenet plan do not have to worry about public transport.
 This all was originally written in C++. In order to learn RUST, I decided to write it all again (so, yes, this is my first rust project). It has been cross compiled for Android, and provides several features to the app:
@@ -95,14 +94,14 @@ For the usage, refer to the `tests` folder.
 <!-- LICENSE -->
 ## License
 
-Distributed under the MIT License. See `LICENSE` for more information.
+Distributed under the GNU General Public License v3.0 License. See `LICENSE` for more information.
 
 
 
 <!-- CONTACT -->
 ## Contact
 
-Nicolo' Mazzucato - [@nicomazz](https://twitter.com/nicomazz) - nicomazz97+fastgtfs@gmail.com
+Nicolo' Mazzucato - [@nicomazz](https://twitter.com/nicomazz)
 
 Project Link: [https://github.com/nicomazz/fastgtfs](https://github.com/nicomazz/fastgtfs)
 
