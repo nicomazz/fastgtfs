@@ -27,7 +27,8 @@ use crate::raw_models::{
 ///     use fastgtfs::gtfs_data::GtfsData;
 ///
 ///     let gtfs_folder = vec!["actv_aut".to_string(), "actv_nav".to_string()];
-///     let parser = RawParser::new(gtfs_folder).parse();
+///     let mut parser = RawParser::new(gtfs_folder);
+///     parser.parse();
 ///     let dataset : GtfsData = parser.dataset;
 /// ```
 #[derive(Debug, Default)]
