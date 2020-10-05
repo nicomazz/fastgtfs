@@ -53,19 +53,19 @@
 This library is the core of the [Venice Navigation&timetables](https://play.google.com/apps/testing/com.actv.nicomazz.lastjni) app. The app aims to provide services using GTFS data completely **offline**. In this way, tourists without an internet plan do not have to worry about public transport.
 This library was all originally written in C++. To learn RUST, I decided to write it all again (so, yes, this is my first rust project). It has been cross-compiled for Android, and provides several features to the app:
 
-- Navigation from point A to B, with a slightly modified version of Microsoft's [RAPTOR](https://www.microsoft.com/en-us/research/wp-content/uploads/2012/01/raptor_alenex.pdf) algorithm. This version takes care of real walking path distances and average person preferences when choosing a solution.
+- **Navigation** from point A to B, with a slightly modified version of Microsoft's [RAPTOR](https://www.microsoft.com/en-us/research/wp-content/uploads/2012/01/raptor_alenex.pdf) algorithm. This version takes care of real walking path distances and average person preferences when choosing a solution.
 
-- Creation of timetables for routes with heterogeneous trips. To do that, I do a topological sort on the different trip paths.
+- Creation of **timetables** for routes with heterogeneous trips. To do that, I do a topological sort on the different trip paths.
 
-- Simulation of the entire network. Given a trip and a time, it is possible to get the bus's exact position by using interpolation. In the android app, it is possible to see a simulation of the entire Venice bus and water-bus network.
+- **Simulation** of the entire network. Given a trip and a time, it is possible to get the bus's exact position by using interpolation. In the android app, it is possible to see a simulation of the entire Venice bus and water-bus network.
 
-- Merge of several datasets into a unique data structure.
+- **Merge** of several datasets into a unique data structure.
 
-- Optimized queries over GTFS dataset. See `gtfs_data.rs` for this.
+- **Optimized queries** over merged GTFS datasets. See `gtfs_data.rs` for this.
     
-- Serialization and deserialization of the raw data structure using Google's [flatbuffers](https://google.github.io/flatbuffers/). The Android app uses this feature. Every time the app is started, it reads the binary data (in the flatbuffer format) directly into the final data structure, avoiding the slow txt parsing. The parsing requires more time and generates the serialized binary data.
+- **Serialization and deserialization** of the raw data structure using Google's [flatbuffers](https://google.github.io/flatbuffers/). In this way, there is a **huge compression**. The Android app uses this feature. Every time the app is started, it reads the binary data (in the flatbuffer format) directly into the final data structure, avoiding the slow txt parsing. The parsing requires more time and generates the serialized binary data.
 
-- Walk time calculator. It uses "HERE" APIs to precompute the real walking times between each stop and the 40 nearest ones. This is done with the `walk_distance_calculator` crate. It uses parsed stop positions.
+- **Walk time calculator**. It uses "HERE" APIs to precompute the real walking times between each stop and the 40 nearest ones. This is done with the `walk_distance_calculator` crate. It uses parsed stop positions. This is then used in the navigation algorithm.
 
 There are a few basic tests, where they are really needed. From the Android app, it seems it works well!
 
