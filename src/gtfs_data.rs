@@ -439,7 +439,8 @@ impl GtfsTime {
     }
 
     pub fn from_date(yyyymmdd: &str) -> GtfsTime {
-        let date = NaiveDate::parse_from_str(yyyymmdd, "%Y%m%d").unwrap();
+        let date = NaiveDate::parse_from_str(yyyymmdd, "%Y%m%d")
+            .expect(&format!("Invalid date: {}", yyyymmdd));
         let date = Utc
             .from_utc_date(&date)
             .and_time(NaiveTime::from_hms(0, 0, 0))
