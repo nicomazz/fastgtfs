@@ -21,7 +21,7 @@ use self::serde::export::Formatter;
 
 /// This is the core of the library. A GTFS dataset is represented by `GtfsData`.
 /// a `GtfsData` object is created by the `RawParser`.
-#[derive(Debug, Default, Serialize, Deserialize)]
+#[derive(Debug, Default, Serialize, Deserialize, Clone)]
 pub struct GtfsData {
     pub dataset_id: u32,
     pub routes: Vec<Route>,
@@ -84,19 +84,18 @@ impl GtfsData {
         stop_times_id: StopTimesId,
         banned_trip_ids: &HashSet<TripId>,
     ) -> Option<(&Trip, StopIndex)> {
-        if trips.is_empty() {
+        // TODO: This function should not use `since_midnight`, otherwise cross day trips are broken.
+        if trips.is_empty() || *min_time == GtfsTime::new_infinite() {
             return None;
         }
-
-        let first_trip = self.get_trip(*trips.first().unwrap());
-        let stop_times = &self.get_stop_times(first_trip.stop_times_id).stop_times;
+        let stop_times = &self.get_stop_times(stop_times_id).stop_times;
         let trips_duration = stop_times.last().unwrap().time;
 
         // indexes of the stops in `stop_times` matching `stop_id`
         let inxes_for_stop = stop_times
             .iter()
-            .skip(start_stop_inx)
             .enumerate()
+            .skip(start_stop_inx)
             .filter(|(_inx, stop_time)| stop_time.stop_id == stop_id)
             .map(|(inx, _)| inx)
             .collect::<Vec<usize>>();
@@ -104,14 +103,14 @@ impl GtfsData {
         trips
             .iter()
             .filter(|t_id| !banned_trip_ids.contains(t_id))
-            .map(|t_id| self.get_trip(*t_id))
+            .map(|&t_id| self.get_trip(t_id))
             .filter(|t| {
                 t.stop_times_id == stop_times_id
                     && self.is_trip_active_on_time(t, min_time, None)
                     && t.start_time + trips_duration >= min_time.since_midnight() as i64
             })
             .find_map(|trip| {
-                // this returns the first for which the content is an Ok result
+                // this returns the first for which the content is a Some result.
                 inxes_for_stop
                     .iter()
                     .filter(|&&inx| {
@@ -351,8 +350,8 @@ pub struct StopTime {
 }
 
 impl StopTime {
-    pub fn time_from_offset(&self, trip_start_time: i64) -> i64 {
-        self.time + trip_start_time
+    pub fn offset_with_trip(&self, trip_start_time_since_midnight: i64) -> i64 {
+        self.time + trip_start_time_since_midnight
     }
 }
 

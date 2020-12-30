@@ -1,12 +1,19 @@
+use std::path::Path;
 use std::time::Instant;
 
 use crate::gtfs_data::GtfsData;
 use crate::raw_parser::RawParser;
 
 pub fn get_test_paths() -> Vec<String> {
+    // Tests can be run with `fastgtfs` or the parent as base dir.
+    let base = if Path::new("fastgtfs").is_dir() {
+        "fastgtfs"
+    } else {
+        "."
+    };
     ["actv_aut", "actv_nav", "alilaguna"]
         .iter()
-        .map(|s| format!("./test_data/{}", s.to_owned()))
+        .map(|s| format!("{}/test_data/{}", base, s.to_owned()))
         .collect::<Vec<String>>()
 }
 
