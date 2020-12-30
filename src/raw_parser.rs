@@ -22,7 +22,7 @@ use crate::raw_models::{
 /// `RawParser` converts several different gtfs datasets (set of .txt files), into a `GtfsData` structure.
 ///
 /// # Example
-/// ```
+/// ```no_run
 ///     use fastgtfs::raw_parser::RawParser;
 ///     use fastgtfs::gtfs_data::GtfsData;
 ///
@@ -113,10 +113,10 @@ mod gtfs_serializer {
             serialize_vector(f.clone(), "services", ds.services),
             serialize_vector(f, "walk_times", ds.walk_times),
         ]
-        .into_iter()
-        .for_each(|v| {
-            v.join().unwrap();
-        });
+            .into_iter()
+            .for_each(|v| {
+                v.join().unwrap();
+            });
     }
 }
 
@@ -136,15 +136,9 @@ mod gtfs_deserializer {
         in_file: String,
     ) -> JoinHandle<Vec<T>> {
         thread::spawn(move || {
-            let now = Instant::now();
             let content = read_file(Path::new(&in_file));
             let r = flexbuffers::Reader::get_root(&content).unwrap();
             let res = Vec::<T>::deserialize(r).unwrap();
-            println!(
-                "Reading serialized for {} in: {}",
-                in_file,
-                now.elapsed().as_millis()
-            );
             res
         })
     }
@@ -212,9 +206,7 @@ impl RawParser {
     }
 
     pub fn read_preprocessed_data(folder: String) -> GtfsData {
-        let now = Instant::now();
         let res = gtfs_deserializer::read_serialized_data(folder);
-        println!("Reading serialized data in: {}", now.elapsed().as_millis());
         res
     }
     pub fn ensure_data_serialized_created(&mut self) {
@@ -639,7 +631,7 @@ impl RawParser {
         /*
          *  List of points. :lat;lng"
          */
-        
+
         let stop_positions = (0..stops_number)
             .map(|_| lines.next().unwrap())
             .map(|l| l.split(';').collect())

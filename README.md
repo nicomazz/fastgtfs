@@ -1,7 +1,7 @@
 
 
 <!-- PROJECT SHIELDS -->
-
+![tests](https://github.com/nicomazz/fastgtfs/workflows/Rust/badge.svg)
 [![Contributors][contributors-shield]][contributors-url]
 [![Forks][forks-shield]][forks-url]
 [![Stargazers][stars-shield]][stars-url]
@@ -92,16 +92,16 @@ Nicolo' Mazzucato - [@nicomazz](https://twitter.com/nicomazz)
 
 <!-- MARKDOWN LINKS & IMAGES -->
 <!-- https://www.markdownguide.org/basic-syntax/#reference-style-links -->
-[contributors-shield]: https://img.shields.io/github/contributors/nicomazz/repo.svg?style=flat-square
-[contributors-url]: https://github.com/nicomazz/repo/graphs/contributors
-[forks-shield]: https://img.shields.io/github/forks/nicomazz/repo.svg?style=flat-square
-[forks-url]: https://github.com/nicomazz/repo/network/members
-[stars-shield]: https://img.shields.io/github/stars/nicomazz/repo.svg?style=flat-square
-[stars-url]: https://github.com/nicomazz/repo/stargazers
-[issues-shield]: https://img.shields.io/github/issues/nicomazz/repo.svg?style=flat-square
-[issues-url]: https://github.com/nicomazz/repo/issues
-[license-shield]: https://img.shields.io/github/license/nicomazz/repo.svg?style=flat-square
-[license-url]: https://github.com/nicomazz/repo/blob/master/LICENSE.txt
+[contributors-shield]: https://img.shields.io/github/contributors/nicomazz/fastgtfs.svg?style=flat-square
+[contributors-url]: https://github.com/nicomazz/fastgtfs/graphs/contributors
+[forks-shield]: https://img.shields.io/github/forks/nicomazz/fastgtfs.svg?style=flat-square
+[forks-url]: https://github.com/nicomazz/fastgtfs/network/members
+[stars-shield]: https://img.shields.io/github/stars/nicomazz/fastgtfs.svg?style=flat-square
+[stars-url]: https://github.com/nicomazz/fastgtfs/stargazers
+[issues-shield]: https://img.shields.io/github/issues/nicomazz/fastgtfs.svg?style=flat-square
+[issues-url]: https://github.com/nicomazz/fastgtfs/issues
+[license-shield]: https://img.shields.io/github/license/nicomazz/fastgtfs.svg?style=flat-square
+[license-url]: https://github.com/nicomazz/fastgtfs/blob/master/LICENSE.txt
 [linkedin-shield]: https://img.shields.io/badge/-LinkedIn-black.svg?style=flat-square&logo=linkedin&colorB=555
 [linkedin-url]: https://linkedin.com/in/nicomazz
 [product-screenshot]: images/screenshot.png
