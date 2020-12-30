@@ -259,6 +259,18 @@ impl<'a> RaptorNavigator<'a> {
             }
 
             let old_dest_stop_time = self.stop_time(to_stop_id, hop_att);
+            // TODO: This `if` is only a workaround. Fix it? It might be fixed by applying walking path in another hop.
+            // we apply walking paths on the same layer of normal paths, and a cycle can be created
+            // More than a cycle, it's one walking path from A to B, and another from B to C.
+            // C's parent will be B as walk path, but also B's parent is a walking path.
+            /*if backtrack_info.is_walking_path() {
+                if let Some(parent_backtrack) = self.p.get(&(backtrack_info.from_stop_id, hop_att))
+                {
+                    if parent_backtrack.is_walking_path() {
+                        continue;
+                    }
+                }
+            }*/
             if destination_time < old_dest_stop_time {
                 self.update_best(to_stop_id, hop_att, destination_time);
                 self.p.insert((to_stop_id, hop_att), backtrack_info);

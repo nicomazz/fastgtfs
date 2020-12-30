@@ -2,7 +2,7 @@ use std::fmt;
 
 use crate::gtfs_data::{GtfsTime, LatLng, Route, StopId, StopTimes, Trip};
 use crate::navigator::{BacktrackingInfo, RaptorNavigator};
-use crate::navigator_models::SolutionComponent::Bus;
+use crate::navigator_models::SolutionComponent::{Bus, Walk};
 
 #[derive(Debug, Clone, Default)]
 pub struct NavigationParams {
@@ -93,58 +93,45 @@ impl Solution {
             return GtfsTime::new_from_midnight(self.navigation_start_time.since_midnight() as i64);
         }
 
-        match self.components.first().unwrap() {
-            SolutionComponent::Walk(w) => {
-                if self.components.len() == 1 {
-                    GtfsTime::new_from_midnight(self.navigation_start_time.since_midnight() as i64)
-                } else {
-                    let walk_time = RaptorNavigator::seconds_by_walk(w.distance);
-                    assert!(self.components.len() >= 2);
-                    let second = &self.components[1];
-                    match second {
-                        Bus(sl) => GtfsTime::new_from_midnight(
-                            (sl.departure_time().since_midnight() - walk_time) as i64,
-                        ),
-                        _ => {
-                            panic!("Can't have 2 consecutive walk components!");
-                        }
-                    }
+        let mut walk_time = 0;
+        for component in self.components.iter() {
+            match component {
+                Walk(w) => {
+                    walk_time += RaptorNavigator::seconds_by_walk(w.distance);
+                }
+                SolutionComponent::Bus(bus) => {
+                    return GtfsTime::new_from_midnight(
+                        (bus.departure_time().since_midnight() - walk_time) as i64,
+                    );
                 }
             }
-            Bus(b) => b.departure_time(),
         }
+        // Only 1 walk path.
+        GtfsTime::new_from_midnight(self.navigation_start_time.since_midnight() as i64)
     }
     pub fn end_time(&self) -> GtfsTime {
         if self.components.is_empty() {
             return GtfsTime::new_from_midnight(self.navigation_start_time.since_midnight() as i64);
         }
 
-        match self.components.last().unwrap() {
-            SolutionComponent::Walk(walk) => {
-                let walk_time = RaptorNavigator::seconds_by_walk(walk.distance);
-                // only walk path
-                if self.components.len() == 1 {
-                    GtfsTime::new_from_midnight(
-                        (self.navigation_start_time.since_midnight() + walk_time) as i64,
-                    )
-                } else {
-                    // walk path preceeded by bus
-                    assert!(self.components.len() >= 2);
-                    let second_last = &self.components[self.components.len() - 2];
-                    match second_last {
-                        Bus(sl) => GtfsTime::new_from_midnight(
-                            (sl.arrival_time().since_midnight() + walk_time) as i64,
-                        ),
-                        _ => {
-                            panic!("Can't have 2 consecutive walk components!");
-                        }
-                    }
+        let mut walk_time = 0;
+        for component in self.components.iter().rev() {
+            match component {
+                Walk(w) => {
+                    walk_time += RaptorNavigator::seconds_by_walk(w.distance);
+                }
+                SolutionComponent::Bus(bus) => {
+                    return GtfsTime::new_from_midnight(
+                        (bus.arrival_time().since_midnight() + walk_time) as i64,
+                    );
                 }
             }
-            SolutionComponent::Bus(bus) => {
-                GtfsTime::new_from_midnight(bus.arrival_time().since_midnight() as i64)
-            }
         }
+
+        // Only walk paths.
+        GtfsTime::new_from_midnight(
+            (self.navigation_start_time.since_midnight() + walk_time) as i64,
+        )
     }
     pub fn duration_seconds(&self) -> usize {
         self.start_time().distance(&self.end_time()) as usize
