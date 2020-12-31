@@ -35,6 +35,7 @@ use crate::raw_models::{
 pub struct RawParser {
     paths: Vec<String>,
     pub dataset: GtfsData,
+    pub dataset_index: u64,
 
     /// The following are used to map from the dataset namespace to the final `GtfsData` name space,
     /// where all the entities are indexed by a numeric ID.
@@ -113,10 +114,10 @@ mod gtfs_serializer {
             serialize_vector(f.clone(), "services", ds.services),
             serialize_vector(f, "walk_times", ds.walk_times),
         ]
-            .into_iter()
-            .for_each(|v| {
-                v.join().unwrap();
-            });
+        .into_iter()
+        .for_each(|v| {
+            v.join().unwrap();
+        });
     }
 }
 
@@ -184,7 +185,10 @@ impl RawParser {
             .clone()
             .iter()
             .map(|p| Path::new(p))
-            .for_each(|p| self.parse_path(p));
+            .for_each(|p| {
+                self.dataset_index += 1;
+                self.parse_path(p);
+            });
         // This parses an additional file created with `walk_distance_calculator`,
         // used to add walking paths in the navigation.
         self.try_parse_walk_paths();
@@ -475,7 +479,7 @@ impl RawParser {
             route_long_name: route.route_long_name,
             trips: vec![],
             stop_times: Default::default(),
-            dataset_index: 0,
+            dataset_index: self.dataset_index,
         })
     }
 
@@ -631,7 +635,7 @@ impl RawParser {
         /*
          *  List of points. :lat;lng"
          */
-
+        
         let stop_positions = (0..stops_number)
             .map(|_| lines.next().unwrap())
             .map(|l| l.split(';').collect())
