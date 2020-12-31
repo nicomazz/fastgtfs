@@ -1,5 +1,6 @@
 use crate::gtfs_data::{GtfsData, GtfsTime, RouteId, StopId, TripId};
 use itertools::Itertools;
+use log::debug;
 use std::collections::{BTreeSet, HashMap, HashSet};
 
 #[derive(Default, Debug, Hash, Ord, PartialOrd, Eq, PartialEq, Clone)]
@@ -43,6 +44,7 @@ impl TimeTable {
                 .parse()
                 .unwrap());
         }
+        debug!("{} trips match directions and routes", trips.len());
         let mut result = TimeTable {
             routes,
             trips,
@@ -54,6 +56,7 @@ impl TimeTable {
             .iter()
             .map(|&t| t as usize)
             .collect::<Vec<usize>>();
+        debug!("Sorting {} trips topologically", trips.len());
         result.stops = TimeTableBuilder::new().sort_stops_topologically(ds, &trips[..]);
 
         Ok(result)
