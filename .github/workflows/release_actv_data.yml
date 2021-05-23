@@ -11,9 +11,10 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-
   build:
-    runs-on: carlazz/fast-gtfs-release:latest 
+    runs-on: ubuntu-latest
+    container:
+      image: carlazz/fast-gtfs-release:latest 
     steps:
     - uses: actions/checkout@v2
     - name: Build
