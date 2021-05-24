@@ -16,8 +16,7 @@ use log::error;
 use rayon::iter::ParallelIterator;
 use rayon::iter::{IntoParallelIterator, IntoParallelRefIterator};
 use serde::{Deserialize, Serialize};
-
-use self::serde::export::Formatter;
+use std::fmt::Formatter;
 
 /// This is the core of the library. A GTFS dataset is represented by `GtfsData`.
 /// a `GtfsData` object is created by the `RawParser`.

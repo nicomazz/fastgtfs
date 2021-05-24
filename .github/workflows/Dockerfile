@@ -3,13 +3,16 @@
 # sudo docker build --tag carlazz/fast-gtfs-release .
 # sudo docker push carlazz/fast-gtfs-release
 
-FROM golang:buster
+FROM rust:1.52
 
-RUN apt-get update && apt-get install -y --no-install-recommends cargo \
-    && apt-get clean \
-    && go get github.com/tcnksm/ghr \
-    && rm -rf ~/.cache /var/lib/apt/lists/*
 
-LABEL name="fast-gtfs-release-ubuntu-21.04"
+RUN curl -s https://api.github.com/repos/tcnksm/ghr/releases/latest | \
+    grep browser_download_url | grep linux_amd | cut -d '"' -f 4 | wget -qi -; \
+    tar xvzf ghr_v*_linux_amd64.tar.gz; \
+    chmod +x ghr_v*_linux_amd64/ghr; \
+    cp ghr_v*_linux_amd64/ghr ghr
+
+
+LABEL name="fast-gtfs-release"
 
 CMD ["/bin/bash"]
