@@ -1,7 +1,7 @@
 
 
 <!-- PROJECT SHIELDS -->
-
+![tests](https://github.com/nicomazz/fastgtfs/workflows/Rust/badge.svg)
 [![Contributors][contributors-shield]][contributors-url]
 [![Forks][forks-shield]][forks-url]
 [![Stargazers][stars-shield]][stars-url]

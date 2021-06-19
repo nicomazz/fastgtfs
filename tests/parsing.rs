@@ -201,11 +201,48 @@ fn valid_trips() {
 }
 
 #[test]
+fn valid_trip_times() {
+    // verifies that all times are sequential
+    let ds = RawParser::read_preprocessed_data_from_default();
+    for stop_times in &ds.stop_times {
+        let st = &stop_times.stop_times;
+        let mut prec_time = st.first().unwrap().time;
+        for i in st {
+            assert!(i.time >= prec_time);
+            prec_time = i.time;
+        }
+        assert_ne!(st.first().unwrap().time, st.last().unwrap().time);
+    }
+}
+
+#[test]
+fn repeated_stops_in_stop_times() {
+    // Checks how many stopTimes with duplicate stops there are.
+    let ds = RawParser::read_preprocessed_data_from_default();
+    let mut cnt = 0;
+    for stop_times in &ds.stop_times {
+        let st = &stop_times.stop_times;
+        if st.len()
+            != st
+                .clone()
+                .into_iter()
+                .unique_by(|i| i.stop_id)
+                .collect_vec()
+                .len()
+        {
+            cnt += 1
+        }
+    }
+    println!("dup: {}/{}", cnt, ds.stop_times.len());
+}
+
+#[test]
 fn date_parsing() {
     let seconds_in_hour = 60 * 60;
     let five_am = 5 * seconds_in_hour;
     assert_eq!(str_time_to_seconds("05:01:02"), five_am + 60 + 2);
 }
+
 #[test]
 fn test_walk_distance() {
     let ds = make_dataset();

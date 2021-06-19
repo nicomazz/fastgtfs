@@ -1,5 +1,6 @@
 use crate::gtfs_data::{GtfsData, GtfsTime, RouteId, StopId, TripId};
 use itertools::Itertools;
+use log::debug;
 use std::collections::{BTreeSet, HashMap, HashSet};
 
 #[derive(Default, Debug, Hash, Ord, PartialOrd, Eq, PartialEq, Clone)]
@@ -43,6 +44,7 @@ impl TimeTable {
                 .parse()
                 .unwrap());
         }
+        debug!("{} trips match directions and routes", trips.len());
         let mut result = TimeTable {
             routes,
             trips,
@@ -54,12 +56,13 @@ impl TimeTable {
             .iter()
             .map(|&t| t as usize)
             .collect::<Vec<usize>>();
+        debug!("Sorting {} trips topologically", trips.len());
         result.stops = TimeTableBuilder::new().sort_stops_topologically(ds, &trips[..]);
 
         Ok(result)
     }
 
-    pub fn get_column(&self, ds: &GtfsData, trip_id: TripId) -> Vec<usize> {
+    pub fn get_column(&self, ds: &GtfsData, trip_id: TripId) -> Vec<Option<usize>> {
         assert!(self.trips.contains(&trip_id));
         let trip = ds.get_trip(trip_id);
         let stop_times = &ds.get_stop_times(trip.stop_times_id).stop_times;
@@ -68,12 +71,12 @@ impl TimeTable {
         let mut results = vec![];
         for target_stop_id in self.stops.clone() {
             let mut times = (*past_appearence.entry(target_stop_id).or_default()) + 1;
-            let mut target_time = GtfsTime::new_infinite();
+            let mut target_time = None;
             for st in stop_times.iter() {
                 if st.stop_id == target_stop_id {
                     times -= 1;
                     if times == 0 {
-                        target_time = GtfsTime::new_from_midnight(st.time + trip.start_time);
+                        target_time = Some(GtfsTime::new_from_midnight(st.time + trip.start_time));
                         break;
                     }
                 }
@@ -83,7 +86,13 @@ impl TimeTable {
         }
         results
             .iter()
-            .map(|time| time.since_midnight() as usize)
+            .map(|time| {
+                if let Some(t) = time {
+                    Some(t.since_midnight() as usize)
+                } else {
+                    None
+                }
+            })
             .collect_vec()
     }
 
