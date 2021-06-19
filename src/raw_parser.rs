@@ -245,6 +245,7 @@ impl RawParser {
             "Generating serialized data at path: {}",
             env::current_dir().unwrap().to_str().unwrap()
         );
+        fs::create_dir_all(DEFAULT_OUT_PATH).unwrap();
         let path = self.paths.first().unwrap();
         let destination_folder = &format!("{}/{}", path, out_folder);
         if !Path::new(destination_folder).exists() {
@@ -256,7 +257,7 @@ impl RawParser {
                 }
             }
         }
-        println!("Creating serialized data!");
+        println!("Creating serialized data in {}", out_folder);
         self.parse();
         let ds = std::mem::take(&mut self.dataset);
         gtfs_serializer::generate_serialized_data(ds, out_folder.to_string());
@@ -293,7 +294,8 @@ impl RawParser {
 
     fn parse_stops(&mut self, path: &Path) {
         let stop_path = Path::new(&path).join(Path::new("stops.txt"));
-        let raw_stops: Vec<RawStop> = parse_gtfs(&stop_path).expect("Stop parsing");
+        let raw_stops: Vec<RawStop> = parse_gtfs(&stop_path)
+            .unwrap_or_else(|_| panic!("Stop file not found: {}", path.display()));
         assert!(!raw_stops.is_empty());
         raw_stops.into_iter().for_each(|s| self.add_stop(s));
     }
@@ -633,7 +635,7 @@ impl RawParser {
         /*
          *  List of points. :lat;lng"
          */
-        
+
         let stop_positions = (0..stops_number)
             .map(|_| lines.next().unwrap())
             .map(|l| l.split(';').collect())

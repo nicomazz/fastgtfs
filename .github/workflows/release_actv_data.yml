@@ -17,10 +17,10 @@ jobs:
       image: carlazz/fast-gtfs-release:latest 
     steps:
     - uses: actions/checkout@v2
-    - name: Build
-      run: cargo build --verbose
     - name: download dataset
       run: cd test_data/ && ./download_test_data.sh && cd -
+    - name: Generate data
+      run: cargo run parse_gtfs_data
     - name: Run tests
       run: cargo test --verbose
       env:

@@ -8,8 +8,10 @@ pub fn get_test_paths() -> Vec<String> {
     // Tests can be run with `fastgtfs` or the parent as base dir.
     let base = if Path::new("fastgtfs").is_dir() {
         "fastgtfs"
-    } else {
+    } else if Path::new("test_data").is_dir() {
         "."
+    } else {
+        ".."
     };
     ["actv_aut", "actv_nav", "alilaguna"]
         .iter()

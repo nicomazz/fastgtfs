@@ -5,17 +5,16 @@ use std::fs::File;
 use std::io::{Read, Write};
 use std::path::Path;
 
+use fastgtfs::gtfs_data::{near_stops, LatLng, Stop};
+use fastgtfs::raw_models::{parse_gtfs, RawStop};
+use fastgtfs::raw_parser::{read_file, RawParser};
+use fastgtfs::test_utils::get_test_paths;
 use itertools::Itertools;
 use rayon::iter::IntoParallelIterator;
 use rayon::iter::ParallelIterator;
 use reqwest::Error;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-
-use fastgtfs::gtfs_data::{near_stops, LatLng, Stop};
-use fastgtfs::raw_models::{parse_gtfs, RawStop};
-use fastgtfs::raw_parser::{read_file, RawParser};
-use fastgtfs::test_utils::get_test_paths;
 
 /// This reads several stop.txt files, and creates a time matrix between each stop and the nearest
 /// N stops. We use the "HERE" api to do that, because it provides 250k free requests at month, and
@@ -63,15 +62,15 @@ fn into_key(a: &Stop, b: &Stop) -> String {
     format!("{};{}", tuple.0, tuple.1)
 }
 
-fn do_request(url: String) -> String {
-    let mut res = reqwest::blocking::get(&url).unwrap();
+fn do_request(url: String) -> Result<String, Error> {
+    let mut res = reqwest::blocking::get(&url)?;
     let mut body = String::new();
-    res.read_to_string(&mut body).unwrap();
-    body
+    res.read_to_string(&mut body);
+    Result::Ok(body)
 }
 
 fn here_distance_request(from: LatLng, tos: Vec<LatLng>) -> Result<Vec<Option<usize>>, Error> {
-    let api_key = env::var("HERE_APIKEY").unwrap();
+    let api_key = env::var("HERE_APIKEY").expect("There is no HERE API key set as env var. Please, set it (it's free for a lot of requests).");
 
     let start_get_param = format!("start0={},{}", from.lat, from.lng);
     let destinations_get_param = tos
@@ -89,7 +88,7 @@ fn here_distance_request(from: LatLng, tos: Vec<LatLng>) -> Result<Vec<Option<us
         api_key, start_get_param, destinations_get_param
     );
 
-    let body = do_request(request_url);
+    let body = do_request(request_url)?;
     let json_reply: Value = serde_json::from_str(&body).unwrap();
     let entries = json_reply["response"]["matrixEntry"].as_array().unwrap();
     assert_eq!(entries.len(), tos.len());
@@ -204,7 +203,7 @@ fn output_file(stops: &Vec<Stop>, near_stops: Vec<(&Stop, Vec<&Stop>)>, res: Dis
     let path = Path::new(FINAL_RESULT);
     let mut file = File::create(&path).unwrap();
     file.write_all(o.as_bytes()).unwrap();
-    println!("Written all the file!")
+    println!("Written all in file: {}", path.display());
 }
 
 fn missing<'a>(
@@ -231,6 +230,12 @@ fn main() {
         .iter()
         .flat_map(|path| {
             let stops_file = Path::new(&path).join(Path::new("stops.txt"));
+            if !stops_file.exists() {
+                panic!(
+                    "Stop file {} doesn't exist. Make sure it's there.",
+                    stops_file.display()
+                );
+            }
             parse_gtfs(&stops_file).unwrap()
         })
         .collect_vec();
@@ -254,7 +259,7 @@ fn main() {
 
     println!("---> Missing: {}", todo.len());
 
-    let chunks = todo.iter().chunks(500);
+    let chunks = todo.iter().chunks(250);
     for chunk in &chunks {
         print!(".");
         let this_chunk_results = chunk

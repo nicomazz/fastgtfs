@@ -5,6 +5,7 @@ OUTPUT_FOLDER=gtfs_serialized
 OUTPUT_GTFS_ZIP=${OUTPUT_FOLDER}.zip
 PREVIOUS_RELEASE="old_dataset.zip"
 export GITHUB_TOKEN=$1
+export PATH=/:$PATH # for ghr downloaded in root
 
 zip_preprocessed_data() {
   zip -r $OUTPUT_GTFS_ZIP --junk-paths $OUTPUT_FOLDER
