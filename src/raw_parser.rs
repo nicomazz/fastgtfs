@@ -2,7 +2,6 @@ use std::collections::{BTreeSet, HashMap, HashSet};
 use std::fs::File;
 use std::io::Read;
 use std::path::Path;
-use std::time::Instant;
 use std::{env, fs};
 
 use geo::algorithm::geodesic_distance::GeodesicDistance;
@@ -125,7 +124,6 @@ mod gtfs_deserializer {
     use std::path::Path;
     use std::thread;
     use std::thread::JoinHandle;
-    use std::time::Instant;
 
     use serde::de::DeserializeOwned;
     use serde::Deserialize;

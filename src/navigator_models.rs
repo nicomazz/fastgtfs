@@ -2,7 +2,7 @@ use std::fmt;
 
 use crate::gtfs_data::{GtfsTime, LatLng, Route, StopId, StopTimes, Trip};
 use crate::navigator::{BacktrackingInfo, RaptorNavigator};
-use crate::navigator_models::SolutionComponent::{Bus, Walk};
+use crate::navigator_models::SolutionComponent::{Walk};
 
 #[derive(Debug, Clone, Default)]
 pub struct NavigationParams {

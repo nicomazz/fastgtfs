@@ -257,11 +257,9 @@ fn test_walk_distance() {
     println!("Without: {}", without);
     assert!(
         without < (ds.stops.len() as f64 * 0.06) as usize,
-        format!(
-            "number of stops without near data: {} out of {}",
-            without,
-            ds.stops.len()
-        )
+        "number of stops without near data: {} out of {}",
+        without,
+        ds.stops.len()
     );
 
     // ideally, this is to uncomment

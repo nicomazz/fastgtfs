@@ -463,11 +463,10 @@ impl<'a> RaptorNavigator<'a> {
                 if trip.is_none() || arriving_time_new_trip < arriving_time_old_trip {
                     debug_assert!(
                         prec_time <= arriving_time_new_trip,
-                        format!(
-                            "Trip starts earlier than arriving in this stop  \n\
+                        "Trip starts earlier than arriving in this stop  \n\
                             ->start time {}\n->arriving_time_new_trip {}\n\n",
-                            prec_time, arriving_time_new_trip,
-                        )
+                        prec_time,
+                        arriving_time_new_trip,
                     );
 
                     // let's get into this new trip
@@ -759,10 +758,7 @@ impl<'a> RaptorNavigator<'a> {
         let mut last_time = start_time.clone();
         for component in &sol.components {
             if let SolutionComponent::Bus(b) = component {
-                assert!(
-                    last_time <= b.departure_time(),
-                    format!("Wrong solution: {}", &sol)
-                );
+                assert!(last_time <= b.departure_time(), "Wrong solution: {}", &sol);
                 last_time = b.arrival_time();
             }
         }
