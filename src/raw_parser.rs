@@ -164,6 +164,96 @@ mod gtfs_deserializer {
     }
 }
 
+#[cfg(target_arch = "wasm32")]
+mod bytes_gtfs_deserializer {
+    use std::collections::HashMap;
+    use std::io;
+    use std::io::Read;
+
+    use bytes::Bytes;
+    use log::{error, trace};
+    use serde::de::DeserializeOwned;
+    use serde::Deserialize;
+
+    use crate::gtfs_data::GtfsData;
+
+    fn deserialize_bytes<T: 'static + DeserializeOwned + Sync + Send>(content: &Vec<u8>) -> Vec<T> {
+        let r = flexbuffers::Reader::get_root(&content).unwrap();
+        Vec::<T>::deserialize(r).unwrap()
+    }
+
+    pub fn read_from_zip_bytes(bytes: Bytes) -> GtfsData {
+        trace!("unzipping {} MB", bytes.len() / (1024 * 1024));
+        let unzipped = unzip_data(bytes.as_ref());
+        trace!("All sucessfully unzipped!");
+        GtfsData {
+            dataset_id: 0,
+            routes: deserialize_bytes(unzipped.get("routes").unwrap()),
+            trips: deserialize_bytes(unzipped.get("trips").unwrap()),
+            shapes: deserialize_bytes(unzipped.get("shapes").unwrap()),
+            stops: deserialize_bytes(unzipped.get("stops").unwrap()),
+            services: deserialize_bytes(unzipped.get("services").unwrap()),
+            stop_times: deserialize_bytes(unzipped.get("stop_times").unwrap()),
+            walk_times: deserialize_bytes(unzipped.get("walk_times").unwrap()),
+        }
+    }
+
+    fn unzip_data(data: &[u8]) -> HashMap<String, Vec<u8>> {
+        let mut reader = io::Cursor::new(data);
+        let mut map = HashMap::new();
+        loop {
+            match zip::read::read_zipfile_from_stream(&mut reader) {
+                Ok(Some(mut file)) => {
+                    trace!(
+                        "---> Found file {}, size: {} KB",
+                        file.name(),
+                        file.compressed_size() / 1024
+                    );
+
+                    // if file.compressed_size() / 1024 > 5000 {
+                    //     trace!("Skipping one");
+                    //     continue;
+                    // }
+                    let mut file_buffer = vec![];
+
+                    file.read_to_end(&mut file_buffer).unwrap();
+                    trace!("read {} KB", file_buffer.len() / 1024);
+                    map.insert(file.name().to_string(), file_buffer.into());
+                }
+                Ok(None) => break,
+                Err(e) => {
+                    error!("{:?}", e);
+                }
+            }
+            trace!("Looping..");
+        }
+        map
+    }
+
+    async fn do_request(url: &str) -> Bytes {
+        let client = reqwest::Client::new();
+        trace!("Doing request for {}.", url);
+
+        let res = client.get(url).send().await;
+        match res {
+            Ok(r) => {
+                trace!("Request sucessfull");
+                r.bytes().await.unwrap()
+            }
+            Err(e) => {
+                error!("Error making the request: {}", e);
+                Bytes::new()
+            }
+        }
+    }
+
+    pub async fn parse_from_url(url: &str) -> GtfsData {
+        let raw_zip = do_request(url).await;
+        trace!("Request succeeded.");
+        read_from_zip_bytes(raw_zip)
+    }
+}
+
 pub fn read_file(path: &Path) -> Vec<u8> {
     let mut content = vec![];
     File::open(path).unwrap().read_to_end(&mut content).unwrap();
@@ -208,9 +298,14 @@ impl RawParser {
     }
 
     pub fn read_preprocessed_data(folder: String) -> GtfsData {
-        let res = gtfs_deserializer::read_serialized_data(folder);
-        res
+        gtfs_deserializer::read_serialized_data(folder)
     }
+
+    #[cfg(target_arch = "wasm32")]
+    pub async fn read_from_url(url: &str) -> GtfsData {
+        bytes_gtfs_deserializer::parse_from_url(url).await
+    }
+
     pub fn ensure_data_serialized_created(&mut self) {
         fs::create_dir_all(DEFAULT_OUT_PATH).unwrap();
         self.ensure_data_serialized_created_in_path(DEFAULT_OUT_PATH)
