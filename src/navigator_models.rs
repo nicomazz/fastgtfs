@@ -179,6 +179,7 @@ pub struct BusSolutionComponent {
     /// Within the trip path, `from` and `to` which index
     pub from_inx: usize,
     pub to_inx: usize,
+    pub shape: Vec<LatLng>,
 }
 
 impl BusSolutionComponent {

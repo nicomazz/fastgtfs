@@ -706,7 +706,7 @@ impl<'a> RaptorNavigator<'a> {
             att_kth -= 1;
         }
         solution.set_last_component_start(self.start_stop.stop_id);
-        solution.complete();
+        solution.complete(&self.dataset);
 
         solution
     }

@@ -4,6 +4,7 @@ extern crate serde;
 use std::cmp::Ordering;
 use std::collections::{BTreeSet, HashMap, HashSet};
 use std::fmt;
+use std::fmt::Formatter;
 use std::time::SystemTime;
 
 use cached::{proc_macro::cached, SizedCache};
@@ -12,6 +13,7 @@ use geo::algorithm::euclidean_distance::EuclideanDistance;
 use geo::algorithm::geodesic_distance::GeodesicDistance;
 use geo::{Coordinate, Point};
 use itertools::Itertools;
+use log::debug;
 use log::error;
 use rayon::iter::ParallelIterator;
 use rayon::iter::{IntoParallelIterator, IntoParallelRefIterator};
@@ -312,6 +314,29 @@ impl GtfsData {
         }
         None
     }
+
+    pub fn get_shape_between(&self, shape_id: usize, from: &LatLng, to: &LatLng) -> Vec<LatLng> {
+        let shape = self.get_shape(shape_id);
+        let from_inx = nearest_index(&shape.points, from);
+        let to_inx = nearest_index(&shape.points, to);
+        if from_inx >= to_inx {
+            debug!("Error in getting shape between two points");
+            return vec![];
+        }
+        (&shape.points[from_inx..to_inx]).to_vec()
+    }
+}
+
+fn nearest_index(points: &[LatLng], target: &LatLng) -> usize {
+    points
+        .iter()
+        .enumerate()
+        .collect::<Vec<(usize, &LatLng)>>()
+        .into_par_iter_if_possible()
+        .map(|(inx, p)| (inx, p.fast_distance(target)))
+        .min_by_key(|(_, d)| *d)
+        .map(|(i, _)| i)
+        .unwrap_or_else(|| 0)
 }
 
 #[cached(
