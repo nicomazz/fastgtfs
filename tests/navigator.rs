@@ -50,7 +50,7 @@ mod tests {
             lng: 12.212_569_713_592_53,
         };
 
-        let solutions = navigate(dataset, &venice, &nave_de_vero);
+        let solutions = navigate(&dataset, &venice, &nave_de_vero);
         assert!(!solutions.is_empty());
         assert_eq!(solutions.len(), 3);
 
@@ -63,21 +63,21 @@ mod tests {
     fn test_many_random_navigations_in_venice() {
         init();
         let dataset = get_dataset();
-        test_many_random_navigations(dataset, get_venice_rect(), get_venice_rect());
+        test_many_random_navigations(&dataset, get_venice_rect(), get_venice_rect());
     }
 
     #[test]
     fn test_many_random_navigations_from_marghera_to_venice() {
         init();
         let dataset = get_dataset();
-        test_many_random_navigations(dataset, get_venice_rect(), get_marghera_rect());
+        test_many_random_navigations(&dataset, get_venice_rect(), get_marghera_rect());
     }
 
     #[test]
     fn test_many_random_navigations_from_marghera_to_lido() {
         init();
         let dataset = get_dataset();
-        test_many_random_navigations(dataset, get_marghera_rect(), get_lido_rect());
+        test_many_random_navigations(&dataset, get_marghera_rect(), get_lido_rect());
     }
 
     #[test]
@@ -102,10 +102,10 @@ fn get_dataset() -> GtfsData {
     RawParser::read_preprocessed_data_from_default()
 }
 
-fn test_many_random_navigations(dataset: GtfsData, from_rect: Rect<f64>, to_rect: Rect<f64>) {
+fn test_many_random_navigations(dataset: &GtfsData, from_rect: Rect<f64>, to_rect: Rect<f64>) {
     let total_runs = 50;
     let without_results = (0..total_runs)
-        .map(|_| spawn_random_navigation(from_rect, to_rect, dataset.clone()))
+        .map(|_| spawn_random_navigation(from_rect, to_rect, dataset))
         .filter(|v| v.is_empty())
         .count();
     println!("without results: {}/{}", without_results, total_runs);
@@ -120,7 +120,7 @@ fn default_start_time() -> GtfsTime {
     GtfsTime::new_from_timestamp(start_timestamp)
 }
 
-fn navigate(dataset: GtfsData, from: &LatLng, to: &LatLng) -> Vec<Solution> {
+fn navigate(dataset: &GtfsData, from: &LatLng, to: &LatLng) -> Vec<Solution> {
     let params = NavigationParams {
         from: from.clone(),
         to: to.clone(),
@@ -144,12 +144,12 @@ fn random_point(rect: &Rect<f64>) -> LatLng {
 fn spawn_random_navigation(
     from_rect: Rect<f64>,
     to_rect: Rect<f64>,
-    dataset: fastgtfs::gtfs_data::GtfsData,
+    dataset: &GtfsData,
 ) -> Vec<Solution> {
     let from = random_point(&from_rect);
     let to = random_point(&to_rect);
 
-    let solutions = navigate(dataset, &from, &to);
+    let solutions = navigate(&dataset, &from, &to);
 
     if solutions.is_empty() {
         error!(

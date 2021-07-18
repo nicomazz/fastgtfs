@@ -1,9 +1,7 @@
 use std::cmp::{max, min};
 use std::collections::{BTreeMap, HashMap, HashSet};
-use std::sync::mpsc::{Receiver, Sender};
-use std::sync::{mpsc, Arc, Mutex};
-use std::thread;
-use std::time::Instant;
+use std::sync::mpsc::Sender;
+use std::sync::{Arc, Mutex};
 
 use itertools::Itertools;
 use log::{debug, error, info, trace};
@@ -35,7 +33,7 @@ type SolutionCallback = Arc<Mutex<Sender<Solution>>>;
 ///  
 /// See `tests/navigator.rs` for some example of how to use this.
 pub struct RaptorNavigator<'a> {
-    on_solution_found: SolutionCallback, //Sender<Solution>,
+    on_solution_found: Option<SolutionCallback>, //Sender<Solution>,
 
     start_stop: Stop,
     end_stop: Stop,
@@ -120,7 +118,7 @@ impl BacktrackingInfo {
 }
 
 impl<'a> RaptorNavigator<'a> {
-    pub fn new(dataset: &GtfsData, on_solution_found: SolutionCallback) -> RaptorNavigator {
+    pub fn new(dataset: &GtfsData, on_solution_found: Option<SolutionCallback>) -> RaptorNavigator {
         RaptorNavigator {
             dataset,
             start_stop: Default::default(),
@@ -142,15 +140,8 @@ impl<'a> RaptorNavigator<'a> {
         }
     }
 
-    pub fn navigate_blocking(dataset: GtfsData, params: NavigationParams) -> Vec<Solution> {
-        let (tx, rx): (Sender<Solution>, Receiver<Solution>) = mpsc::channel();
-        let nav_thread = thread::spawn(move || {
-            let mut navigator = RaptorNavigator::new(&dataset, Arc::new(Mutex::new(tx)));
-            navigator.find_path_multiple(params);
-        });
-        let solutions = rx.iter().collect();
-        nav_thread.join().unwrap();
-        solutions
+    pub fn navigate_blocking(dataset: &GtfsData, params: NavigationParams) -> Vec<Solution> {
+        RaptorNavigator::new(&dataset, Option::None).find_path_multiple(params)
     }
 
     fn init_navigation(&mut self, params: &NavigationParams) {
@@ -190,16 +181,20 @@ impl<'a> RaptorNavigator<'a> {
             self.stops_near_destination_list.iter().copied().collect();
     }
 
-    fn send_solution(&mut self, solution: &Solution) {
-        let callback = self.on_solution_found.lock().unwrap();
-        callback.send(solution.clone()).unwrap();
+    fn on_solution_found(&mut self, solution: &Solution) {
+        trace!("New solution found!");
+        if let Some(callback) = &self.on_solution_found {
+            let callback = callback.lock().unwrap();
+            callback.send(solution.clone()).unwrap();
+        }
     }
 
     /// does `params.max_changes` searches, each time adding the trips of precedent solutions in `banned_trip_ids`.
-    pub fn find_path_multiple(&mut self, params: NavigationParams) {
+    pub fn find_path_multiple(&mut self, params: NavigationParams) -> Vec<Solution> {
         debug!("Navigation with param {:?} started", params);
         let now = instant::Instant::now();
         self.only_best = true;
+        let mut solutions = vec![];
 
         self.init_navigation(&params);
 
@@ -214,13 +209,15 @@ impl<'a> RaptorNavigator<'a> {
             match self.best_stop {
                 Some(best_stop) => {
                     let sol = self.reconstruct_solution(best_stop, self.best_kth.unwrap());
-                    self.send_solution(&sol);
                     self.add_trips_to_banned(&sol);
+                    self.on_solution_found(&sol);
+                    solutions.push(sol);
                 }
                 None => error!("No solution found at {}-th navigagtion", ith_navigation),
             }
         }
         info!("Navigation finished in: {} ms", now.elapsed().as_millis());
+        solutions
     }
 
     /// Does `navigation_params.max_changes` passes
@@ -302,11 +299,7 @@ impl<'a> RaptorNavigator<'a> {
             .iter()
             .filter_map(|stop_time| {
                 let stop_inx = stop_time.get_stop_inx(stop_id);
-                if let Some(stop_inx) = stop_inx {
-                    Some((route_id, stop_time.stop_times_id, stop_inx))
-                } else {
-                    None
-                }
+                stop_inx.map(|stop_inx| (route_id, stop_time.stop_times_id, stop_inx))
             })
             .collect_vec();
 
@@ -454,14 +447,13 @@ impl<'a> RaptorNavigator<'a> {
                 let trip_stop_inx = max(curr_stop_inx, new_trip_stop_inx);
                 let arriving_time_new_trip =
                     self.new_time(new_trip.start_time + stop_times[trip_stop_inx].time);
-                let arriving_time_old_trip = if trip.is_none() {
-                    GtfsTime::new_infinite()
-                } else {
-                    self.new_time(
-                        self.dataset.get_trip(trip.unwrap()).start_time
-                            + stop_times[curr_stop_inx].time,
-                    )
+                let arriving_time_old_trip = match trip {
+                    None => GtfsTime::new_infinite(),
+                    Some(trip) => self.new_time(
+                        self.dataset.get_trip(trip).start_time + stop_times[curr_stop_inx].time,
+                    ),
                 };
+
                 // pruning if we are only looking for the best
                 if self.only_best && self.best_destination_time < arriving_time_new_trip {
                     continue;
@@ -523,7 +515,7 @@ impl<'a> RaptorNavigator<'a> {
         if self.stops_near_destination_map.contains(&stop_id)
             && (new_time < self.best_destination_time
                 || (new_time == self.best_destination_time
-                    && hop_att < self.best_kth.unwrap_or(u8::max_value())))
+                    && hop_att < self.best_kth.unwrap_or(u8::MAX)))
         {
             self.best_destination_time = new_time;
             self.best_kth = Some(hop_att);
@@ -640,8 +632,10 @@ impl<'a> RaptorNavigator<'a> {
     }
 
     fn reconstruct_solution(&self, stop_id: usize, hop_att: Round) -> Solution {
-        let mut solution: Solution = Default::default();
-        solution.navigation_start_time = (&self.navigation_params.start_time).clone();
+        let mut solution = Solution {
+            navigation_start_time: (&self.navigation_params.start_time).clone(),
+            ..Default::default()
+        };
 
         let mut att_stop = stop_id;
         let mut att_kth = hop_att;
