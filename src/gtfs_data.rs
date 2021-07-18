@@ -556,7 +556,7 @@ impl LatLng {
     }
     // this should be used only for comparison
     pub fn fast_distance(&self, other: &LatLng) -> u64 {
-        self.as_point().euclidean_distance(&other.as_point()) as u64
+        (self.as_point().euclidean_distance(&other.as_point()) * 1000000.0) as u64
     }
 }
 
