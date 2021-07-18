@@ -16,7 +16,10 @@ use log::error;
 use rayon::iter::ParallelIterator;
 use rayon::iter::{IntoParallelIterator, IntoParallelRefIterator};
 use serde::{Deserialize, Serialize};
-use std::fmt::Formatter;
+
+use crate::wasm_aware_rayon_iterators::{
+    IntoParallelIteratorIfPossible, ParallelIteratorIfPossible,
+};
 
 /// This is the core of the library. A GTFS dataset is represented by `GtfsData`.
 /// a `GtfsData` object is created by the `RawParser`.
@@ -125,7 +128,7 @@ impl GtfsData {
         let coord = pos.as_point();
         let item = self
             .stops
-            .par_iter()
+            .par_iter_if_possible()
             .min_by_key(|s| s.stop_pos.distance_meters_to_point(&coord) as i64);
         item.unwrap()
     }
@@ -133,7 +136,7 @@ impl GtfsData {
     pub fn get_stops_in_range(&self, pos: LatLng, meters: f64) -> Vec<usize> {
         let coord = pos.as_point();
         self.stops
-            .par_iter()
+            .par_iter_if_possible()
             .filter(|&stop| stop.stop_pos.distance_meters_to_point(&coord) < meters)
             .map(|s| s.stop_id)
             .collect::<Vec<usize>>()
@@ -230,7 +233,7 @@ impl GtfsData {
         let near_stops = self.get_near_stops(position, 300);
 
         let unique_routes = near_stops
-            .into_par_iter()
+            .into_par_iter_if_possible()
             .map(|s| self.get_stop(s))
             .flat_map(|stop| &stop.routes)
             .collect::<Vec<&RouteId>>()
@@ -239,7 +242,7 @@ impl GtfsData {
             .collect::<Vec<&RouteId>>();
 
         let active_trips = unique_routes
-            .into_par_iter()
+            .into_par_iter_if_possible()
             .flat_map(|&r_id| &self.get_route(r_id).trips)
             .map(|&t_id| self.get_trip(t_id))
             .filter(|&trip| self.is_trip_active_on_time(trip, time, Some(1)))
@@ -264,7 +267,7 @@ impl GtfsData {
 
         let stop_indexes = route
             .stop_times
-            .par_iter()
+            .par_iter_if_possible()
             .map(|&st| self.get_stop_times(st))
             .map(|st| {
                 (
@@ -280,7 +283,7 @@ impl GtfsData {
             .collect::<HashMap<StopTimesId, Vec<StopIndex>>>();
 
         trips
-            .par_iter()
+            .par_iter_if_possible()
             .map(|&t_id| self.get_trip(t_id))
             .filter(|t| self.is_trip_active_on_time(t, &date, Some(within_sec)))
             .map(|t| (t.trip_id, self.get_stop_times(t.stop_times_id)))

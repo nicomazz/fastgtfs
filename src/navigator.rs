@@ -7,7 +7,9 @@ use std::time::Instant;
 
 use itertools::Itertools;
 use log::{debug, error, info, trace};
-use rayon::iter::{IntoParallelIterator, IntoParallelRefIterator, ParallelIterator};
+
+#[cfg(not(target_arch = "wasm32"))]
+use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 
 use crate::gtfs_data::{
     GtfsData, GtfsTime, LatLng, RouteId, Stop, StopDistance, StopId, StopIndex, StopTimesId, Trip,
@@ -15,6 +17,10 @@ use crate::gtfs_data::{
 };
 use crate::navigator_models::SolutionComponent::Bus;
 use crate::navigator_models::{NavigationParams, Solution, SolutionComponent, TimeUpdate};
+use crate::wasm_aware_rayon_iterators::{
+    IntoParallelIteratorIfPossible, ParallelIteratorIfPossible,
+};
+use std::iter::FromIterator;
 
 type SolutionCallback = Arc<Mutex<Sender<Solution>>>;
 
@@ -153,7 +159,7 @@ impl<'a> RaptorNavigator<'a> {
 
         let start_end_stops = &[&params.from, &params.to]
             .to_vec()
-            .into_par_iter()
+            .into_par_iter_if_possible()
             .map(|pos| self.dataset.find_nearest_stop(pos))
             .collect::<Vec<&Stop>>();
         self.start_stop = start_end_stops[0].clone();
@@ -234,8 +240,8 @@ impl<'a> RaptorNavigator<'a> {
             self.marked_stops.clear();
             trace!("Considering {} route_stops", route_stops_to_consider.len());
 
-            let updates = route_stops_to_consider
-                .into_par_iter()
+            let updates = Vec::from_iter(route_stops_to_consider)
+                .into_par_iter_if_possible()
                 .flat_map(|((route_id, stop_times_id), stop_inx)| {
                     self.handle_routes_passing_in_stop(route_id, stop_times_id, stop_inx, hop_att)
                 })
@@ -328,7 +334,7 @@ impl<'a> RaptorNavigator<'a> {
         let all_route_stops: Vec<(RouteId, StopTimesId, StopIndex)> = self
             .marked_stops
             .clone()
-            .into_par_iter()
+            .into_par_iter_if_possible()
             .map(|stop_id| ds.get_stop(stop_id))
             .flat_map(|stop| self.get_stop_routes_to_process(stop))
             .collect();
@@ -565,7 +571,7 @@ impl<'a> RaptorNavigator<'a> {
 
     fn compute_walking_updates(&self) -> Vec<TimeUpdate> {
         self.marked_stops
-            .par_iter()
+            .par_iter_if_possible()
             .flat_map(|&from_stop_id| self.compute_walking_updates_for_stop(from_stop_id))
             .collect::<Vec<TimeUpdate>>()
     }
@@ -720,7 +726,7 @@ impl<'a> RaptorNavigator<'a> {
         self.active_trips = self
             .dataset
             .routes
-            .par_iter()
+            .par_iter_if_possible()
             .map(|r| {
                 (
                     r.route_id,

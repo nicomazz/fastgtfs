@@ -17,6 +17,9 @@ use crate::gtfs_data::{
 use crate::raw_models::{
     parse_gtfs, RawRoute, RawService, RawServiceException, RawShape, RawStop, RawStopTime, RawTrip,
 };
+use crate::wasm_aware_rayon_iterators::{
+    IntoParallelIteratorIfPossible, ParallelIteratorIfPossible,
+};
 
 /// `RawParser` converts several different gtfs datasets (set of .txt files), into a `GtfsData` structure.
 ///
@@ -431,7 +434,7 @@ impl RawParser {
             .collect();
 
         let stop_times = grouped_trips
-            .into_par_iter()
+            .into_par_iter_if_possible()
             .map(|stop_times_in_construction| self.create_stop_times(stop_times_in_construction))
             .collect::<Vec<StopTimeInConstruction>>();
 
@@ -450,7 +453,7 @@ impl RawParser {
 
         let routes_stop_times: Vec<BTreeSet<usize>> = ds
             .routes
-            .par_iter()
+            .par_iter_if_possible()
             .map(|r| {
                 r.trips
                     .iter()
@@ -476,7 +479,7 @@ impl RawParser {
         assert!(!raw_stop_times.is_empty());
         let start_time = str_time_to_seconds(&raw_stop_times[0].arrival_time);
         let stop_times = raw_stop_times
-            .par_iter()
+            .par_iter_if_possible()
             .map(|st| {
                 let stop_id = *self.stop_name_to_inx.get(&st.stop_id).unwrap();
                 StopTime {
@@ -531,7 +534,7 @@ impl RawParser {
 
         // build the shapes in parallel
         let with_points = shapes_in_construction
-            .into_par_iter()
+            .into_par_iter_if_possible()
             .map(|sh| ShapeInConstruction {
                 id: sh.id,
                 raw_shapes: vec![],
