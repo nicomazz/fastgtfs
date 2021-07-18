@@ -1,8 +1,10 @@
 use std::fmt;
 
-use crate::gtfs_data::{GtfsTime, LatLng, Route, StopId, StopTimes, Trip};
+use serde::{Deserialize, Serialize};
+
+use crate::gtfs_data::{GtfsData, GtfsTime, LatLng, Route, StopId, StopTimes, Trip};
 use crate::navigator::{BacktrackingInfo, RaptorNavigator};
-use crate::navigator_models::SolutionComponent::{Walk};
+use crate::navigator_models::SolutionComponent::{Bus, Walk};
 
 #[derive(Debug, Clone, Default)]
 pub struct NavigationParams {
@@ -13,7 +15,7 @@ pub struct NavigationParams {
     pub num_solutions_to_find: u8,
 }
 
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Default, Clone, Deserialize, Serialize)]
 pub struct Solution {
     pub navigation_start_time: GtfsTime,
     pub components: Vec<SolutionComponent>,
@@ -43,10 +45,8 @@ impl fmt::Display for Solution {
 
 impl Solution {
     pub(crate) fn set_last_component_start(&mut self, stop_id: usize) {
-        if let Some(last) = self.components.last_mut() {
-            if let SolutionComponent::Walk(w) = last {
-                w.from_stop_id = stop_id
-            }
+        if let Some(Walk(w)) = self.components.last_mut() {
+            w.from_stop_id = stop_id
         }
     }
     pub(crate) fn add_walking_path(
@@ -77,6 +77,7 @@ impl Solution {
             route: route.clone(),
             trip: trip.clone(),
             path: path.clone(),
+            shape: Default::default(),
             from_inx,
             to_inx,
         };
@@ -84,8 +85,23 @@ impl Solution {
         self.components.push(SolutionComponent::Bus(component));
     }
 
-    pub(crate) fn complete(&mut self) {
+    pub(crate) fn complete(&mut self, dataset: &GtfsData) {
         self.components.reverse();
+        self.compute_bus_shapes(dataset);
+    }
+
+    fn compute_bus_shapes(&mut self, dataset: &GtfsData) {
+        for component in &mut self.components {
+            if let Bus(b) = component {
+                let from_stop = dataset.get_stop(b.path.stop_times[b.from_inx].stop_id);
+                let to_stop = dataset.get_stop(b.path.stop_times[b.to_inx].stop_id);
+                b.shape = dataset.get_shape_between(
+                    b.trip.shape_id,
+                    &from_stop.stop_pos,
+                    &to_stop.stop_pos,
+                )
+            }
+        }
     }
 
     pub fn start_time(&self) -> GtfsTime {
@@ -139,7 +155,7 @@ impl Solution {
 }
 
 //noinspection RsExternalLinter
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub enum SolutionComponent {
     Walk(WalkSolutionComponent),
     //noinspection ALL
@@ -171,7 +187,7 @@ impl fmt::Display for SolutionComponent {
     }
 }
 
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Default, Clone, Deserialize, Serialize)]
 pub struct BusSolutionComponent {
     pub route: Route,
     pub trip: Trip,
@@ -192,7 +208,7 @@ impl BusSolutionComponent {
     }
 }
 
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Default, Clone, Deserialize, Serialize)]
 pub struct WalkSolutionComponent {
     pub from_stop_id: usize,
     pub to_stop_id: usize,
