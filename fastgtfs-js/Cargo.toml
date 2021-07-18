@@ -1,0 +1,60 @@
+[package]
+name = "fastgtfs-js"
+version = "0.1.0"
+authors = ["Gamma", "Nicolo' Mazzucato"]
+edition = "2018"
+description = "wasm bindings for fastgtfs rust library"
+repository = "https://github.com/nicomazz/fastgtfs/fastgtfs-js"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[features]
+default = ["console_error_panic_hook"]
+
+[dependencies]
+futures = "0.3"
+reqwest = { version = "0.11", features = ["blocking"] }
+js-sys = "0.3.45"
+wasm-bindgen = { version = "0.2.68", features = ["serde-serialize"] }
+wasm-bindgen-futures = "0.4.18"
+zip = { version = "0.5.13", default-features = false, features = ["deflate"] }
+bytes = "1.0.1"
+fastgtfs = { version = "0.1.0", path = ".."}
+wasm-bindgen-console-logger = "0.1.1"
+log = "0.4.14"
+lazy_static = "1.4.0"
+chrono = { version = "0.4", features = ["serde"] }
+
+
+# The `console_error_panic_hook` crate provides better debugging of panics by
+# logging them with `console.error`. This is great for development, but requires
+# all the `std::fmt` and `std::panicking` infrastructure, so isn't great for
+# code size when deploying.
+console_error_panic_hook = { version = "0.1.6", optional = true }
+
+# `wee_alloc` is a tiny allocator for wasm that is only ~1K in code size
+# compared to the default allocator's ~10K. It is slower than the default
+# allocator, however.
+#
+# Unfortunately, `wee_alloc` requires nightly Rust when targeting wasm for now.
+wee_alloc = { version = "0.4.5", optional = true }
+
+[dev-dependencies]
+wasm-bindgen-test = "0.3.13"
+
+[dependencies.web-sys]
+version = "0.3.4"
+features = [
+    'Headers',
+    'Request',
+    'RequestInit',
+    'RequestMode',
+    'Response',
+    'Window',
+]
+
+
+[profile.release]
+# Tell `rustc` to optimize for small code size.
+opt-level =3

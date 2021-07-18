@@ -226,6 +226,7 @@ mod bytes_gtfs_deserializer {
                 Ok(None) => break,
                 Err(e) => {
                     error!("{:?}", e);
+                    break;
                 }
             }
             trace!("Looping..");
