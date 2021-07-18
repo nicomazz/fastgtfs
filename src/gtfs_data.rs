@@ -15,8 +15,8 @@ use geo::{Coordinate, Point};
 use itertools::Itertools;
 use log::debug;
 use log::error;
+#[cfg(not(target_arch = "wasm32"))]
 use rayon::iter::ParallelIterator;
-use rayon::iter::{IntoParallelIterator, IntoParallelRefIterator};
 use serde::{Deserialize, Serialize};
 
 use crate::wasm_aware_rayon_iterators::{

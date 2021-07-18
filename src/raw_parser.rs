@@ -7,8 +7,8 @@ use std::{env, fs};
 use geo::algorithm::geodesic_distance::GeodesicDistance;
 use itertools::Itertools;
 use log::error;
+#[cfg(not(target_arch = "wasm32"))]
 use rayon::iter::ParallelIterator;
-use rayon::iter::{IntoParallelIterator, IntoParallelRefIterator};
 
 use crate::gtfs_data::{
     to_coordinates, GtfsData, GtfsTime, LatLng, Route, Service, ServiceException, Shape, Stop,

@@ -1,13 +1,13 @@
 use std::cmp::{max, min};
 use std::collections::{BTreeMap, HashMap, HashSet};
+use std::iter::FromIterator;
 use std::sync::mpsc::Sender;
 use std::sync::{Arc, Mutex};
 
 use itertools::Itertools;
 use log::{debug, error, info, trace};
-
 #[cfg(not(target_arch = "wasm32"))]
-use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
+use rayon::iter::ParallelIterator;
 
 use crate::gtfs_data::{
     GtfsData, GtfsTime, LatLng, RouteId, Stop, StopDistance, StopId, StopIndex, StopTimesId, Trip,
@@ -18,7 +18,6 @@ use crate::navigator_models::{NavigationParams, Solution, SolutionComponent, Tim
 use crate::wasm_aware_rayon_iterators::{
     IntoParallelIteratorIfPossible, ParallelIteratorIfPossible,
 };
-use std::iter::FromIterator;
 
 type SolutionCallback = Arc<Mutex<Sender<Solution>>>;
 
