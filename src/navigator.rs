@@ -154,7 +154,7 @@ impl<'a> RaptorNavigator<'a> {
     }
 
     fn init_navigation(&mut self, params: &NavigationParams) {
-        let now = Instant::now();
+        let now = instant::Instant::now();
         self.navigation_params = params.clone();
 
         let start_end_stops = &[&params.from, &params.to]
@@ -198,7 +198,7 @@ impl<'a> RaptorNavigator<'a> {
     /// does `params.max_changes` searches, each time adding the trips of precedent solutions in `banned_trip_ids`.
     pub fn find_path_multiple(&mut self, params: NavigationParams) {
         debug!("Navigation with param {:?} started", params);
-        let now = Instant::now();
+        let now = instant::Instant::now();
         self.only_best = true;
 
         self.init_navigation(&params);
@@ -327,7 +327,7 @@ impl<'a> RaptorNavigator<'a> {
     /// Those will be scanned later in handle_route_stop
     fn build_route_stop(&self) -> BTreeMap<(RouteId, StopTimesId), StopIndex> {
         trace!("Building route stop");
-        let now = Instant::now();
+        let now = instant::Instant::now();
         let ds = self.dataset;
 
         // This means that we later have to consider RouteId, with the path StopTimesId, from StopIndex
@@ -556,7 +556,7 @@ impl<'a> RaptorNavigator<'a> {
             "Adding walking paths. Initial number of marked stops: {}",
             self.marked_stops.len()
         );
-        let now = Instant::now();
+        let now = instant::Instant::now();
 
         let updates_to_do = self.compute_walking_updates();
 
@@ -721,7 +721,7 @@ impl<'a> RaptorNavigator<'a> {
     }
 
     fn compute_trips_active_today(&mut self, time: &GtfsTime) {
-        let now = Instant::now();
+        let now = instant::Instant::now();
         let &ds = &self.dataset;
         self.active_trips = self
             .dataset
