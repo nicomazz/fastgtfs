@@ -25,7 +25,9 @@
 <script>
     let map;
     let first_pos = null;
+    let first_marker = null;
     let second_pos = null;
+    let second_marker = null;
 
     function initMap() {
         map = new google.maps.Map(document.getElementById("map"), {
@@ -35,16 +37,45 @@
 
         map.addListener("click", (mapsMouseEvent) => {
             if (first_pos === null) {
+                if (first_marker != null) first_marker.setMap(null);
+                if (second_marker != null) second_marker.setMap(null);
                 console.log("First set!");
                 first_pos = mapsMouseEvent.latLng.toJSON();
+                first_marker = new google.maps.Marker({
+                    position: first_pos,
+                    draggable: true,
+                    map,
+                    animation: google.maps.Animation.DROP,
+                    title: "Start",
+                });
+                setListeners(first_marker);
+
             } else if (second_pos === null) {
                 console.log("Second set!");
                 second_pos = mapsMouseEvent.latLng.toJSON();
-                navigate(first_pos, second_pos, map);
+                second_marker = new google.maps.Marker({
+                    position: second_pos,
+                    draggable: true,
+                    map,
+                    animation: google.maps.Animation.DROP,
+                    title: "End",
+                });
+                do_navigate();
+                setListeners(second_marker);
                 first_pos = null;
                 second_pos = null;
             }
         });
+    }
+
+    function setListeners(marker) {
+        marker.addListener('dragend', function () {
+            do_navigate();
+        });
+    }
+
+    function do_navigate() {
+        navigate(first_marker.getPosition().toJSON(), second_marker.getPosition().toJSON(), map);
     }
 
 </script>
