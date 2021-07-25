@@ -26,7 +26,9 @@
     <br />
     <br />
     <br />
-    <a href="https://play.google.com/apps/testing/com.actv.nicomazz.lastjni">View Demo</a>
+    <a href="https://nicomazz.github.io/fastgtfs/">View Web assembly demo</a>
+    ·
+    <a href="https://play.google.com/apps/testing/com.actv.nicomazz.lastjni">View App Demo</a>
     ·
     <a href="https://github.com/nicomazz/fastgtfs/issues">Report Bug</a>
     ·
