@@ -1,12 +1,6 @@
 extern crate flexbuffers;
 extern crate serde;
 
-use std::cmp::Ordering;
-use std::collections::{BTreeSet, HashMap, HashSet};
-use std::fmt;
-use std::fmt::Formatter;
-use std::time::SystemTime;
-
 use cached::{proc_macro::cached, SizedCache};
 use chrono::{DateTime, Datelike, NaiveDate, NaiveTime, TimeZone, Timelike, Utc};
 use geo::algorithm::euclidean_distance::EuclideanDistance;
@@ -18,6 +12,14 @@ use log::error;
 #[cfg(not(target_arch = "wasm32"))]
 use rayon::iter::ParallelIterator;
 use serde::{Deserialize, Serialize};
+use std::cmp::Ordering;
+use std::collections::{BTreeSet, HashMap, HashSet};
+use std::fmt;
+use std::fmt::Formatter;
+#[cfg(not(target_arch = "wasm32"))]
+use std::time::SystemTime;
+#[cfg(target_arch = "wasm32")]
+use wasm_timer::SystemTime;
 
 use crate::wasm_aware_rayon_iterators::{
     IntoParallelIteratorIfPossible, ParallelIteratorIfPossible,
@@ -232,7 +234,17 @@ impl GtfsData {
 
     /// Returns all the trips near to `position` at a given `time`
     pub fn get_near_trips(&self, time: &GtfsTime, position: &LatLng, number: usize) -> Vec<&Trip> {
-        let near_stops = self.get_near_stops(position, 300);
+        self.get_near_trips_near_stops(time, position, number, 300)
+    }
+
+    pub fn get_near_trips_near_stops(
+        &self,
+        time: &GtfsTime,
+        position: &LatLng,
+        number: usize,
+        near_stops: usize,
+    ) -> Vec<&Trip> {
+        let near_stops = self.get_near_stops(position, near_stops);
 
         let unique_routes = near_stops
             .into_par_iter_if_possible()

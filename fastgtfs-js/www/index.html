@@ -13,69 +13,19 @@
 <noscript>This page contains webassembly and javascript content, please enable
     javascript in your browser.
 </noscript>
-<script src="./index.js"></script>
+<script src="bootstrap.js"></script>
+
 <script
         async
         src="https://maps.googleapis.com/maps/api/js?key=AIzaSyDWzBg0xuFZyShU1uyD0xNdgSDdJKtDvkU&callback=initMap&libraries=&v=weekly"
 ></script>
-<script src="./bootstrap.js"></script>
 </body>
 
-
 <script>
-    let map;
-    let first_pos = null;
-    let first_marker = null;
-    let second_pos = null;
-    let second_marker = null;
-
     function initMap() {
-        map = new google.maps.Map(document.getElementById("map"), {
-            center: {lat: 45.440847, lng: 12.315515},
-            zoom: 12,
-        });
-
-        map.addListener("click", (mapsMouseEvent) => {
-            if (first_pos === null) {
-                if (first_marker != null) first_marker.setMap(null);
-                if (second_marker != null) second_marker.setMap(null);
-                console.log("First set!");
-                first_pos = mapsMouseEvent.latLng.toJSON();
-                first_marker = new google.maps.Marker({
-                    position: first_pos,
-                    draggable: true,
-                    map,
-                    animation: google.maps.Animation.DROP,
-                    title: "Start",
-                });
-                setListeners(first_marker);
-
-            } else if (second_pos === null) {
-                console.log("Second set!");
-                second_pos = mapsMouseEvent.latLng.toJSON();
-                second_marker = new google.maps.Marker({
-                    position: second_pos,
-                    draggable: true,
-                    map,
-                    animation: google.maps.Animation.DROP,
-                    title: "End",
-                });
-                do_navigate();
-                setListeners(second_marker);
-                first_pos = null;
-                second_pos = null;
-            }
-        });
-    }
-
-    function setListeners(marker) {
-        marker.addListener('dragend', function () {
-            do_navigate();
-        });
-    }
-
-    function do_navigate() {
-        navigate(first_marker.getPosition().toJSON(), second_marker.getPosition().toJSON(), map);
+        console.log("InitMap called");
+        // Delay because wasm load takes time and happens async.
+        setTimeout(() => initializeMap(), 2000);
     }
 
 </script>

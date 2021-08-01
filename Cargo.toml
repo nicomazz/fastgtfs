@@ -34,6 +34,7 @@ futures = "0.3"
 bytes = "1.0.1"
 zip = { version = "0.5.13", default-features = false, features = ["deflate"] }
 reqwest = { version = "0.11", features = ["blocking"] }
+wasm-timer = "0.2.5"
 
 
 [profile.release]
@@ -43,3 +44,9 @@ lto = true
 bench = false
 name = "fastgtfs"
 crate-type = ["cdylib", "rlib"]
+
+
+[workspace]
+members = [
+   "fastgtfs-js"
+]

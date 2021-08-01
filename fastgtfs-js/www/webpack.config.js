@@ -2,7 +2,21 @@ const CopyWebpackPlugin = require("copy-webpack-plugin");
 const path = require('path');
 
 module.exports = {
-    entry: ["./bootstrap.js"],
+    entry: ["./bootstrap.ts"],
+    module: {
+        rules: [
+            {
+                test: /\.tsx?$/,
+                use: 'ts-loader',
+                exclude: /node_modules/,
+            },
+        ],
+    },
+    devtool: 'inline-source-map',
+
+    resolve: {
+        extensions: ['.tsx', '.ts', '.js'],
+    },
     output: {
         path: path.resolve(__dirname, "dist"),
         filename: "bootstrap.js",
@@ -12,10 +26,8 @@ module.exports = {
     plugins: [
         new CopyWebpackPlugin({
             patterns: [
-                {from: 'index.html', to: 'dist/index.html'},
-                {from: 'gtfs_serialized.zip', to: 'dist/gtfs_serialized.zip'},
-                {from: 'index.js', to: 'dist/index.js'},
-
+                {from: 'index.html', to: 'index.html'},
+                {from: 'gtfs_serialized.zip', to: 'gtfs_serialized.zip'},
             ]
         })
     ],

@@ -1,15 +1,18 @@
 use std::sync::RwLock;
 
 use chrono::NaiveDate;
-use fastgtfs::gtfs_data::{GtfsData, GtfsTime, LatLng};
-use fastgtfs::navigator::RaptorNavigator;
-use fastgtfs::navigator_models::{NavigationParams, Solution};
-use fastgtfs::raw_parser::RawParser;
 use lazy_static::lazy_static;
 use log::trace;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen_console_logger::DEFAULT_LOGGER;
 
+use crate::utils::set_panic_hook;
+use fastgtfs::gtfs_data::{GtfsData, GtfsTime, LatLng};
+use fastgtfs::navigator::RaptorNavigator;
+use fastgtfs::navigator_models::{NavigationParams, Solution};
+use fastgtfs::raw_parser::RawParser;
+
+mod realtime_position;
 mod utils;
 
 #[cfg(feature = "wee_alloc")]
@@ -17,7 +20,7 @@ mod utils;
 static ALLOC: wee_alloc::WeeAlloc = wee_alloc::WeeAlloc::INIT;
 
 lazy_static! {
-    static ref GTFS_DATASET: RwLock<GtfsData> = RwLock::new(Default::default());
+    pub static ref GTFS_DATASET: RwLock<GtfsData> = RwLock::new(Default::default());
 }
 
 #[wasm_bindgen]
@@ -29,6 +32,7 @@ extern "C" {
 
 #[wasm_bindgen]
 pub async fn download_and_parse(file_url: String) {
+    set_panic_hook();
     log::set_logger(&DEFAULT_LOGGER).unwrap();
     log::set_max_level(log::LevelFilter::Trace);
 
@@ -45,6 +49,22 @@ pub fn get_stop_number() -> usize {
     let stop_number = GTFS_DATASET.read().unwrap().stops.len();
     trace!("Trying to get stop number from rust: {}", stop_number);
     stop_number
+}
+
+#[wasm_bindgen]
+pub fn get_shape(trip_id: usize) -> JsValue {
+    let dataset = GTFS_DATASET.read().unwrap();
+    let shape = &dataset.get_shape(dataset.get_trip(trip_id).shape_id).points;
+    JsValue::from_serde(shape).unwrap()
+}
+
+#[wasm_bindgen]
+pub fn get_trip_name(trip_id: usize) -> String {
+    let dataset = GTFS_DATASET.read().unwrap();
+    dataset
+        .get_route(dataset.get_trip(trip_id).route_id)
+        .route_short_name
+        .clone()
 }
 
 #[wasm_bindgen]

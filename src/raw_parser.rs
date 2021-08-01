@@ -734,7 +734,7 @@ impl RawParser {
         /*
          *  List of points. :lat;lng"
          */
-
+        
         let stop_positions = (0..stops_number)
             .map(|_| lines.next().unwrap())
             .map(|l| l.split(';').collect())
