@@ -3,7 +3,7 @@
 # sudo docker build --tag carlazz/fast-gtfs-release .
 # sudo docker push carlazz/fast-gtfs-release
 
-FROM rust:1.52
+FROM rust:1.55
 
 
 RUN apt-get update && apt-get install -y --no-install-recommends zip && apt-get clean; \
