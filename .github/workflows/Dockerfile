@@ -3,7 +3,7 @@
 # sudo docker build --tag carlazz/fast-gtfs-release .
 # sudo docker push carlazz/fast-gtfs-release
 
-FROM rust:1.55
+FROM rust:1.57
 
 
 RUN apt-get update && apt-get install -y --no-install-recommends zip && apt-get clean; \
@@ -12,9 +12,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends zip && apt-get 
     tar xvzf ghr_v*_linux_amd64.tar.gz; \
     chmod +x ghr_v*_linux_amd64/ghr; \
     cp ghr_v*_linux_amd64/ghr ghr; \
-    git clone https://github.com/nicomazz/fastgtfs; \
-    cd fastgtfs; cd test_data/ && ./download_test_data.sh && cd -; \
-    cargo test; \
     rm -rf ~/.cache /var/lib/apt/lists/*;
 
 
