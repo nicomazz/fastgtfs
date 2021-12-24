@@ -1,3 +1,16 @@
 target/
 .vscode
 test_data/
+.idea/
+Cargo.lock
+.cargo
+**/node_modules
+**/dist
+ghr*
+gtfs_serialized
+temp_walk_results
+walk_distance_calculator/test*
+walk_distance_calculator/temp*
+walk_distance_calculator/walk_results.txt
+walk_results.txt
+demo/
