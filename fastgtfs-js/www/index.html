@@ -3,17 +3,18 @@
 
 <head>
     <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
     <title>fastgtfs-js demo</title>
     <script src="https://polyfill.io/v3/polyfill.min.js?features=default"></script>
 </head>
 
 <body>
-<div id="map"></div>
+<div id="root"></div>
 <!-- Async script executes immediately and must be after any DOM elements used in callback. -->
 <noscript>This page contains webassembly and javascript content, please enable
     javascript in your browser.
 </noscript>
-<script src="bootstrap.js"></script>
+<script src="bundle.js"></script>
 
 <script
         async
@@ -25,15 +26,11 @@
     function initMap() {
         console.log("InitMap called");
         // Delay because wasm load takes time and happens async.
-        setTimeout(() => initializeMap(), 2000);
+        //setTimeout(() => initializeMap(), 2000);
     }
 
 </script>
 <style>
-    #map {
-        height: 100%;
-    }
-
     html,
     body {
         height: 100%;

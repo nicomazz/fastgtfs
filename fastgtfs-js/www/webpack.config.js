@@ -1,29 +1,39 @@
 const CopyWebpackPlugin = require("copy-webpack-plugin");
 const path = require('path');
+const webpack = require("webpack");
 
 module.exports = {
-    entry: ["./bootstrap.ts"],
+    entry: ["./src/index.ts"],
+    stats: 'errors-only',
     module: {
         rules: [
             {
-                test: /\.tsx?$/,
-                use: 'ts-loader',
+                test: /\.(js|ts)x*$/,
                 exclude: /node_modules/,
+                loader: "babel-loader",
+                options: { presets: ["@babel/env"] }
             },
+            {
+                test: /\.css$/,
+                use: ["style-loader", "css-loader"]
+            }
         ],
     },
     devtool: 'inline-source-map',
-
+    devServer: {
+        static: path.resolve(__dirname, './dist')
+    },
     resolve: {
         extensions: ['.tsx', '.ts', '.js'],
     },
     output: {
         path: path.resolve(__dirname, "dist"),
-        filename: "bootstrap.js",
+        filename: "bundle.js",
     },
     experiments: {asyncWebAssembly: true},
     mode: 'production',
     plugins: [
+        new webpack.HotModuleReplacementPlugin(),
         new CopyWebpackPlugin({
             patterns: [
                 {from: 'index.html', to: 'index.html'},

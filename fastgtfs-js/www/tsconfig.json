@@ -12,6 +12,8 @@
     "jsx": "react",
     "allowJs": true,
     "moduleResolution": "node",
-    "esModuleInterop": true
-  }
+    "esModuleInterop": true,
+    "noEmit": true
+  },
+  "include": ["src"]
 }
