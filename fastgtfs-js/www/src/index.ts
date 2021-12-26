@@ -9,13 +9,7 @@ import Marker = google.maps.Marker;
 import ReactDOM from 'react-dom';
 import { App } from './App';
 
-
-
-ReactDOM.render(
-    App(),
-    document.getElementById('root'),
-);
-
+ReactDOM.render(App(), document.getElementById('root'));
 
 let paths: Polyline[] = [];
 
@@ -28,12 +22,12 @@ function navigate(from: LatLng, to: LatLng, map: google.maps.Map) {
   console.log('Navigating from ', from, 'to', to);
   paths.forEach((path) => path.setMap(null));
   paths = [];
-  let solutions = wasm.get_solutions(from.lat, from.lng, to.lat, to.lng);
+  const solutions = wasm.get_solutions(from.lat, from.lng, to.lat, to.lng);
   if (solutions.length === 0) {
     console.error('No solution found');
     return;
   }
-  let first = solutions[0];
+  const first = solutions[0];
   console.log('First solution:', first);
   first.components.forEach((leg: any) => {
     if ('Walk' in leg) {
@@ -45,7 +39,7 @@ function navigate(from: LatLng, to: LatLng, map: google.maps.Map) {
 }
 
 async function downloadDataAndParse() {
-  let file_url = window.location.href + '/gtfs_serialized.zip';
+  const file_url = `${window.location.href}/gtfs_serialized.zip`;
   await wasm.download_and_parse(file_url);
   // console.log("From js: ", wasm.try_navigate());
 }

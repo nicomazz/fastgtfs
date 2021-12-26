@@ -29,20 +29,20 @@ export function moveMarkerSmooth(
   marker: google.maps.Marker,
   timeMs: number
 ) {
-  let initialTime = new Date().getTime();
-  let finalTime = initialTime + timeMs;
+  const initialTime = new Date().getTime();
+  const finalTime = initialTime + timeMs;
 
-  let initialLat = from.lat();
-  let initialLng = from.lng();
+  const initialLat = from.lat();
+  const initialLng = from.lng();
 
-  let deltaLat = to.lat() - from.lat();
-  let deltaLng = to.lng() - from.lng();
+  const deltaLat = to.lat() - from.lat();
+  const deltaLng = to.lng() - from.lng();
 
   function changePosition() {
-    let currentTime = new Date().getTime();
+    const currentTime = new Date().getTime();
     if (currentTime > finalTime) return;
-    let percentage = (currentTime - initialTime) / timeMs;
-    let currentPosition = new google.maps.LatLng(
+    const percentage = (currentTime - initialTime) / timeMs;
+    const currentPosition = new google.maps.LatLng(
       initialLat + deltaLat * percentage,
       initialLng + deltaLng * percentage
     );

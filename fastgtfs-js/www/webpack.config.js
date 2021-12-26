@@ -4,7 +4,6 @@ const webpack = require("webpack");
 
 module.exports = {
     entry: ["./src/index.ts"],
-    stats: 'errors-only',
     module: {
         rules: [
             {
@@ -29,6 +28,11 @@ module.exports = {
     output: {
         path: path.resolve(__dirname, "dist"),
         filename: "bundle.js",
+    },
+    performance: {
+        hints: false,
+        maxEntrypointSize: 512000,
+        maxAssetSize: 512000
     },
     experiments: {asyncWebAssembly: true},
     mode: 'production',
