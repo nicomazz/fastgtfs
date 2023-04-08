@@ -734,7 +734,7 @@ impl RawParser {
         /*
          *  List of points. :lat;lng"
          */
-        
+
         let stop_positions = (0..stops_number)
             .map(|_| lines.next().unwrap())
             .map(|l| l.split(';').collect())
@@ -783,7 +783,10 @@ impl RawParser {
                     stop_id: stop.stop_id,
                     ..Default::default()
                 });
-                println!("Skipping one, dist: {}", dist_meters);
+                println!(
+                    "Nearest point to {} is too far ({}m). Consider recalculating walk distances",
+                    stop.stop_name, dist_meters
+                );
             } else {
                 self.dataset.walk_times.push(StopWalkTime {
                     stop_id: stop.stop_id,
