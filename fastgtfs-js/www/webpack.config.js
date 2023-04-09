@@ -3,7 +3,7 @@ const path = require('path');
 const webpack = require("webpack");
 
 module.exports = {
-    entry: ["./src/index.ts"],
+    entry: ["./src/index.tsx"],
     module: {
         rules: [
             {
@@ -29,12 +29,14 @@ module.exports = {
         path: path.resolve(__dirname, "dist"),
         filename: "bundle.js",
     },
+    node: {global: false},
     performance: {
         hints: false,
         maxEntrypointSize: 512000,
         maxAssetSize: 512000
     },
     experiments: {asyncWebAssembly: true},
+    // Set mode:'development' to enable hot reloading
     mode: 'production',
     plugins: [
         new webpack.HotModuleReplacementPlugin(),
