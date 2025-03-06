@@ -34,10 +34,9 @@ pub mod here_api {
         let json_reply: Value = serde_json::from_str(&body).unwrap();
         //if there is an error key, return error
         if json_reply["error"].is_null() == false {
-            let error_message = json_reply["error"].to_string();
+            let error_message = json_reply["error"].as_str().unwrap();
             println!("Error: {}", error_message);
-            return Ok(vec![]);
-            //return Err(RequestError::CustomError(format!("Error message: {}", error_message)));
+            return Err(crate::RequestError::CustomError(format!("Error message: {}", error_message)));
         }
 
         let entries = json_reply["response"]["matrixEntry"].as_array().unwrap();
@@ -61,9 +60,8 @@ pub mod here_api {
             .collect())
     }
     fn do_request(url: String) -> RResult<String> {
-        let mut res = reqwest::blocking::get(&url)?;
-        let mut body = String::new();
-        res.read_to_string(&mut body).unwrap();
-        Result::Ok(body)
+        let res = reqwest::blocking::get(&url)?;
+        let body = res.text().await.unwrap_or_default();
+        Ok(body)
     }
 }

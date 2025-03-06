@@ -25,6 +25,15 @@ use serde::{Deserialize, Serialize};
 use crate::here_client::here_api;
 
 pub mod here_client;
+#[cfg(test)]
+mod test{
+    use super::*;
+
+    #[test]
+    fn test_partial_save_main() {
+       walk_distance_calculator::tests::partial_save_test::test_partial_save();
+    }
+}
 pub mod partial_save;
 
 /// This reads several stop.txt files, and creates a time matrix between each stop and the nearest
@@ -93,20 +102,17 @@ fn compute_distances(
     near: &Vec<&Stop>,
     res: &DistancesResult,
 ) -> Vec<(StopPair, Distance)> {
-    let missing = near
+    let missing_positions = near
         .iter()
-        .filter(|to| !res.contains_key(&StopPair::from_stops(from,to)))
-        .map(|&to| to)
+        .filter(|to| !res.contains_key(&StopPair::from_stops(from, to)))
+        .map(|to| to.stop_pos)
         .collect_vec();
-
-    let missing_positions = missing.iter().map(|i| i.stop_pos.clone()).collect_vec();
-
+    
     if missing_positions.is_empty() {
         return vec![];
     }
 
-    let distances =
-        here_api::here_distance_request(from.stop_pos.clone(), missing_positions).unwrap();
+    let distances = here_api::here_distance_request(from.stop_pos, missing_positions).unwrap();
     //sleep for 1 second to avoid overloading the api
     std::thread::sleep(std::time::Duration::from_secs(1));
     let filled = distances.iter().filter(|i| !i.is_none()).count();
@@ -118,11 +124,13 @@ fn compute_distances(
         distances.len()
     );
 
-    missing
-        .iter()
-        .zip(distances)
-        .filter_map(|(to, distance)| distance.map(|dist| (StopPair::from_stops(from, &to), dist)))
-        .collect_vec()
+    let mut result = Vec::new();
+    for (to, distance) in missing_positions.into_iter().zip(distances) {
+        if let Some(dist) = distance {
+            result.push((StopPair::from_stops(from, to), dist));
+        }
+    }
+    result
 }
 
 
